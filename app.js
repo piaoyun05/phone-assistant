@@ -17,16 +17,74 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 从记录重新同步日程
-function syncSchedulesFromRecords() {
+async function syncSchedulesFromRecords() {
     schedules = [];
-    records.forEach(record => {
-        const extracted = parseSchedules(record.content);
-        extracted.forEach(s => {
-            s.recordId = record.id;
+    
+    // 如果配置了 AI，使用 AI 解析所有记录
+    if (aiConfig.apiKey && aiConfig.endpoint) {
+        await syncSchedulesWithAI();
+    } else {
+        // 使用本地解析
+        records.forEach(record => {
+            const extracted = parseSchedules(record.content);
+            extracted.forEach(s => {
+                s.recordId = record.id;
+            });
+            schedules.push(...extracted);
         });
-        schedules.push(...extracted);
-    });
+    }
+    
     localStorage.setItem('schedules', JSON.stringify(schedules));
+}
+
+// 使用 AI 同步所有记录的日程
+async function syncSchedulesWithAI() {
+    const allTexts = records.map(r => ({
+        id: r.id,
+        content: r.content
+    }));
+    
+    if (allTexts.length === 0) return;
+    
+    const prompt = `请分析以下记录列表，提取其中所有的日程安排信息。返回 JSON 数组格式，每个元素包含：
+- recordId: 对应记录的 id
+- title: 事项标题（简短描述）
+- datetime: ISO 格式的日期时间字符串
+
+如果没有日程安排，返回空数组 []。
+
+记录列表：
+${JSON.stringify(allTexts, null, 2)}
+
+只返回 JSON，不要其他说明。`;
+
+    try {
+        const response = await callAI(prompt);
+        const schedulesData = JSON.parse(response);
+        
+        if (Array.isArray(schedulesData)) {
+            schedulesData.forEach(s => {
+                schedules.push({
+                    id: Date.now() + Math.random(),
+                    title: s.title,
+                    datetime: s.datetime,
+                    recordId: s.recordId,
+                    timestamp: new Date().toISOString()
+                });
+            });
+            console.log('AI 同步日程完成，识别到', schedulesData.length, '个日程');
+        }
+    } catch (error) {
+        console.error('AI 同步日程失败:', error);
+        // 降级到本地解析
+        records.forEach(record => {
+            const extracted = parseSchedules(record.content);
+            extracted.forEach(s => {
+                s.recordId = record.id;
+            });
+            schedules.push(...extracted);
+        });
+    }
 }
 
 // 标签页切换
@@ -35,7 +93,7 @@ function initTabs() {
     const tabContents = document.querySelectorAll('.tab-content');
 
     tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             const targetTab = btn.dataset.tab;
 
             tabBtns.forEach(b => b.classList.remove('active'));
@@ -46,7 +104,7 @@ function initTabs() {
 
             // 切换到日程页面时自动同步
             if (targetTab === 'schedule') {
-                syncSchedulesFromRecords();
+                await syncSchedulesFromRecords();
                 renderSchedules();
             }
         });
@@ -368,14 +426,14 @@ function initScheduleTab() {
         });
     });
 
-    refreshBtn.addEventListener('click', () => {
-        syncSchedulesFromRecords();
+    refreshBtn.addEventListener('click', async () => {
+        await syncSchedulesFromRecords();
         renderSchedules();
     });
 
     if (syncBtn) {
-        syncBtn.addEventListener('click', () => {
-            syncSchedulesFromRecords();
+        syncBtn.addEventListener('click', async () => {
+            await syncSchedulesFromRecords();
             renderSchedules();
             alert('日程同步完成');
         });
