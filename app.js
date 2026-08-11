@@ -12,6 +12,19 @@ document.addEventListener('DOMContentLoaded', function() {
     renderSchedules();
 });
 
+// 从记录重新同步日程
+function syncSchedulesFromRecords() {
+    schedules = [];
+    records.forEach(record => {
+        const extracted = parseSchedules(record.content);
+        extracted.forEach(s => {
+            s.recordId = record.id;
+        });
+        schedules.push(...extracted);
+    });
+    localStorage.setItem('schedules', JSON.stringify(schedules));
+}
+
 // 标签页切换
 function initTabs() {
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -26,6 +39,12 @@ function initTabs() {
 
             btn.classList.add('active');
             document.getElementById(`${targetTab}-tab`).classList.add('active');
+
+            // 切换到日程页面时自动同步
+            if (targetTab === 'schedule') {
+                syncSchedulesFromRecords();
+                renderSchedules();
+            }
         });
     });
 }
@@ -54,6 +73,7 @@ function initRecordTab() {
         // 解析日程
         const extractedSchedules = parseSchedules(content);
         if (extractedSchedules.length > 0) {
+            extractedSchedules.forEach(s => { s.recordId = record.id; });
             schedules.push(...extractedSchedules);
             localStorage.setItem('schedules', JSON.stringify(schedules));
             renderSchedules();
@@ -67,90 +87,104 @@ function initRecordTab() {
     });
 }
 
-// 解析日程
+// 解析日程 - 增强版
 function parseSchedules(text) {
     const schedules = [];
     const now = new Date();
-
-    // 匹配日期时间模式
-    const patterns = [
-        // 明天下午3点
-        { regex: /明天(?:下午|晚上)?(\d{1,2})点/, offset: 1, hour: null },
-        // 后天上午10点
-        { regex: /后天(?:上午|早上)?(\d{1,2})点/, offset: 2, hour: null },
-        // 下周一上午10点
-        { regex: /下周([一二三四五六日天])(?:上午|早上)?(\d{1,2})点/, offset: null, hour: null },
-        // 今天/今晚
-        { regex: /今天(?:下午|晚上)?(\d{1,2})点/, offset: 0, hour: null },
-        // 具体日期 2024-01-15
-        { regex: /(\d{4})-(\d{1,2})-(\d{1,2})(?:.*?)(\d{1,2})点/, offset: null, hour: null }
-    ];
-
-    // 简单的日程提取
     let match;
 
-    // 明天
-    if (match = text.match(/明天(?:下午|晚上)?(\d{1,2})点/)) {
+    // 提取事项标题（去掉时间部分）
+    function extractTitle(text, timePattern) {
+        let title = text.replace(timePattern, '').trim();
+        title = title.replace(/^[,，、\s]+/, '').trim();
+        return title || text;
+    }
+
+    // 今天
+    if (match = text.match(/今天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
         const hour = parseInt(match[1]);
+        const minute = match[2] ? parseInt(match[2]) : 0;
         const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
         const date = new Date(now);
-        date.setDate(date.getDate() + 1);
-        date.setHours(adjustedHour, 0, 0, 0);
+        date.setHours(adjustedHour, minute, 0, 0);
 
         schedules.push({
             id: Date.now() + Math.random(),
-            content: text,
+            title: extractTitle(text, /今天.*?\d{1,2}[点:：]\d{0,2}/),
+            datetime: date.toISOString(),
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // 明天
+    if (match = text.match(/明天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
+        const hour = parseInt(match[1]);
+        const minute = match[2] ? parseInt(match[2]) : 0;
+        const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
+        const date = new Date(now);
+        date.setDate(date.getDate() + 1);
+        date.setHours(adjustedHour, minute, 0, 0);
+
+        schedules.push({
+            id: Date.now() + Math.random(),
+            title: extractTitle(text, /明天.*?\d{1,2}[点:：]\d{0,2}/),
             datetime: date.toISOString(),
             timestamp: new Date().toISOString()
         });
     }
 
     // 后天
-    if (match = text.match(/后天(?:上午|早上)?(\d{1,2})点/)) {
+    if (match = text.match(/后天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
         const hour = parseInt(match[1]);
-        const date = new Date(now);
-        date.setDate(date.getDate() + 2);
-        date.setHours(hour, 0, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            content: text,
-            datetime: date.toISOString(),
-            timestamp: new Date().toISOString()
-        });
-    }
-
-    // 今天
-    if (match = text.match(/今天(?:下午|晚上)?(\d{1,2})点/)) {
-        const hour = parseInt(match[1]);
+        const minute = match[2] ? parseInt(match[2]) : 0;
         const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
         const date = new Date(now);
-        date.setHours(adjustedHour, 0, 0, 0);
+        date.setDate(date.getDate() + 2);
+        date.setHours(adjustedHour, minute, 0, 0);
 
         schedules.push({
             id: Date.now() + Math.random(),
-            content: text,
+            title: extractTitle(text, /后天.*?\d{1,2}[点:：]\d{0,2}/),
             datetime: date.toISOString(),
             timestamp: new Date().toISOString()
         });
     }
 
     // 下周一到周日
-    if (match = text.match(/下周([一二三四五六日天])(?:上午|早上|下午|晚上)?(\d{1,2})点/)) {
+    if (match = text.match(/下周([一二三四五六日天])(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
         const dayMap = { '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '日': 0, '天': 0 };
         const targetDay = dayMap[match[1]];
         const hour = parseInt(match[2]);
+        const minute = match[3] ? parseInt(match[3]) : 0;
         const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
 
         const date = new Date(now);
         const currentDay = date.getDay();
         const daysUntilNext = (targetDay - currentDay + 7) % 7 + 7;
         date.setDate(date.getDate() + daysUntilNext);
-        date.setHours(adjustedHour, 0, 0, 0);
+        date.setHours(adjustedHour, minute, 0, 0);
 
         schedules.push({
             id: Date.now() + Math.random(),
-            content: text,
+            title: extractTitle(text, /下周[一二三四五六日天].*?\d{1,2}[点:：]\d{0,2}/),
+            datetime: date.toISOString(),
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // 具体日期 2024-01-15 或 2024/01/15
+    if (match = text.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:.*?)(\d{1,2})[点:：](\d{0,2})/)) {
+        const year = parseInt(match[1]);
+        const month = parseInt(match[2]) - 1;
+        const day = parseInt(match[3]);
+        const hour = parseInt(match[4]);
+        const minute = match[5] ? parseInt(match[5]) : 0;
+
+        const date = new Date(year, month, day, hour, minute, 0, 0);
+
+        schedules.push({
+            id: Date.now() + Math.random(),
+            title: extractTitle(text, /\d{4}[-\/]\d{1,2}[-\/]\d{1,2}.*?\d{1,2}[点:：]\d{0,2}/),
             datetime: date.toISOString(),
             timestamp: new Date().toISOString()
         });
@@ -177,9 +211,13 @@ function renderRecords() {
         const time = new Date(record.timestamp);
         const timeStr = `${time.getMonth() + 1}/${time.getDate()} ${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
 
+        // 检查是否有对应的日程
+        const hasSchedule = schedules.some(s => s.recordId === record.id);
+        const scheduleIcon = hasSchedule ? ' 📅' : '';
+
         return `
             <div class="record-item">
-                <div class="record-content">${escapeHtml(record.content)}</div>
+                <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
                 <div class="record-time">${timeStr}</div>
             </div>
         `;
@@ -190,6 +228,7 @@ function renderRecords() {
 function initScheduleTab() {
     const filterBtns = document.querySelectorAll('.filter-btn');
     const refreshBtn = document.getElementById('refresh-schedule-btn');
+    const syncBtn = document.getElementById('sync-schedule-btn');
 
     filterBtns.forEach(btn => {
         btn.addEventListener('click', () => {
@@ -200,11 +239,20 @@ function initScheduleTab() {
     });
 
     refreshBtn.addEventListener('click', () => {
+        syncSchedulesFromRecords();
         renderSchedules();
     });
+
+    if (syncBtn) {
+        syncBtn.addEventListener('click', () => {
+            syncSchedulesFromRecords();
+            renderSchedules();
+            alert('日程同步完成');
+        });
+    }
 }
 
-// 渲染日程列表
+// 渲染日程列表 - 按日期分组
 function renderSchedules(filter = 'all') {
     const container = document.getElementById('schedule-container');
     const now = new Date();
@@ -244,17 +292,59 @@ function renderSchedules(filter = 'all') {
         return;
     }
 
-    container.innerHTML = filteredSchedules.map(schedule => {
+    // 按日期分组
+    const groups = {};
+    filteredSchedules.forEach(schedule => {
         const date = new Date(schedule.datetime);
-        const dateStr = formatDate(date);
+        const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+        if (!groups[dateKey]) {
+            groups[dateKey] = {
+                label: getDateLabel(date),
+                items: []
+            };
+        }
+        groups[dateKey].items.push(schedule);
+    });
 
-        return `
-            <div class="schedule-item">
-                <div class="schedule-date">${dateStr}</div>
-                <div class="schedule-content">${escapeHtml(schedule.content)}</div>
-            </div>
-        `;
-    }).join('');
+    // 渲染分组
+    let html = '';
+    Object.keys(groups).forEach(key => {
+        const group = groups[key];
+        html += `<div class="schedule-group">`;
+        html += `<div class="schedule-group-header">${group.label}</div>`;
+        group.items.forEach(schedule => {
+            const date = new Date(schedule.datetime);
+            const timeStr = formatTime(date);
+            const title = schedule.title || schedule.content;
+            html += `
+                <div class="schedule-item">
+                    <div class="schedule-time">${timeStr}</div>
+                    <div class="schedule-content">${escapeHtml(title)}</div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// 获取日期标签
+function getDateLabel(date) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+    if (dateOnly.getTime() === today.getTime()) {
+        return '今天';
+    } else if (dateOnly.getTime() === tomorrow.getTime()) {
+        return '明天';
+    } else {
+        const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        return `${date.getMonth() + 1}月${date.getDate()}日 ${weekDays[date.getDay()]}`;
+    }
 }
 
 // 问答页面初始化
@@ -309,7 +399,7 @@ function generateAnswer(question) {
         }
 
         return `今天有 ${todaySchedules.length} 个日程：\n` +
-            todaySchedules.map(s => `• ${formatTime(new Date(s.datetime))} - ${s.content}`).join('\n');
+            todaySchedules.map(s => `• ${formatTime(new Date(s.datetime))} - ${s.title || s.content}`).join('\n');
     }
 
     if (question.includes('明天')) {

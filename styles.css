@@ -190,26 +190,43 @@ body {
     color: white;
 }
 
-.schedule-item {
-    background: white;
-    padding: 16px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    border-left: 4px solid #667eea;
+.schedule-group {
+    margin-bottom: 20px;
 }
 
-.schedule-date {
-    color: #667eea;
-    font-size: 13px;
+.schedule-group-header {
+    font-size: 16px;
     font-weight: 600;
-    margin-bottom: 6px;
+    color: #667eea;
+    padding: 8px 0;
+    border-bottom: 2px solid #667eea;
+    margin-bottom: 10px;
+}
+
+.schedule-item {
+    background: white;
+    padding: 14px 16px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+    border-left: 4px solid #667eea;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.schedule-time {
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 600;
+    min-width: 50px;
 }
 
 .schedule-content {
     color: #333;
     font-size: 15px;
     line-height: 1.5;
+    flex: 1;
 }
 
 /* 问答页面样式 */
