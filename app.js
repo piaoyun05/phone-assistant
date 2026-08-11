@@ -123,7 +123,7 @@ function initRecordTab() {
     const saveBtn = document.getElementById('save-btn');
     const recordInput = document.getElementById('record-input');
 
-    saveBtn.addEventListener('click', () => {
+    saveBtn.addEventListener('click', async () => {
         const content = recordInput.value.trim();
         if (!content) {
             alert('请输入内容');
@@ -139,29 +139,15 @@ function initRecordTab() {
         records.unshift(record);
         localStorage.setItem('records', JSON.stringify(records));
 
-        // 使用 AI 解析日程
-        if (aiConfig.apiKey && aiConfig.endpoint) {
-            parseSchedulesWithAI(content, record.id);
-        } else {
-            // 使用本地解析
-            const extractedSchedules = parseSchedules(content);
-            if (extractedSchedules.length > 0) {
-                extractedSchedules.forEach(s => { s.recordId = record.id; });
-                schedules.push(...extractedSchedules);
-                localStorage.setItem('schedules', JSON.stringify(schedules));
-                renderSchedules();
-                alert(`已保存记录，并识别到 ${extractedSchedules.length} 个日程`);
-            } else {
-                alert('记录已保存');
-            }
-        }
-
         recordInput.value = '';
         renderRecords();
+
+        // 保存时立即用 AI 解析该条记录的日程（仅一次）
+        await parseSchedulesWithAI(content, record.id);
     });
 }
 
-// 使用 AI 解析日程
+// 使用 AI 解析单条记录的日程
 async function parseSchedulesWithAI(text, recordId) {
     const prompt = `请分析以下文本，提取其中的日程安排信息。如果文本中包含时间相关的安排，请返回 JSON 数组格式，每个元素包含：
 - title: 事项标题（简短描述）
@@ -188,7 +174,7 @@ async function parseSchedulesWithAI(text, recordId) {
                 });
             });
             localStorage.setItem('schedules', JSON.stringify(schedules));
-            renderSchedules();
+            hasAISynced = true;
             alert(`已保存记录，AI 识别到 ${schedulesData.length} 个日程`);
         } else {
             alert('记录已保存');
@@ -201,9 +187,8 @@ async function parseSchedulesWithAI(text, recordId) {
             extractedSchedules.forEach(s => { s.recordId = recordId; });
             schedules.push(...extractedSchedules);
             localStorage.setItem('schedules', JSON.stringify(schedules));
-            renderSchedules();
         }
-        alert('记录已保存（AI 解析失败，使用本地解析）');
+        alert('记录已保存');
     }
 }
 
