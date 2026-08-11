@@ -1,10 +1,3 @@
-// JSONBin 配置
-const JSONBIN_CONFIG = {
-    apiKey: '$2a$10$VTKrChWi/xQAssnzQndoseXK06UdJQ1HSuL/qVxkhIA/SWvvo3uvu',
-    binId: null, // 会在首次使用时自动创建
-    baseUrl: 'https://api.jsonbin.io/v3/b'
-};
-
 // 数据存储
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
@@ -12,149 +5,16 @@ let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 // AI 配置
 let aiConfig = JSON.parse(localStorage.getItem('aiConfig') || '{}');
 
-// 同步状态
-let isSyncing = false;
-let lastSyncTime = localStorage.getItem('lastSyncTime') || null;
-
 // 页面加载时初始化
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', function() {
     initTabs();
     initRecordTab();
     initScheduleTab();
     initQATab();
     initSettingsTab();
-    
-    // 初始化云端同步
-    await initCloudSync();
-    
     renderRecords();
     renderSchedules();
-    updateSyncStatus();
 });
-
-// 初始化云端同步
-async function initCloudSync() {
-    // 从 localStorage 获取 binId
-    JSONBIN_CONFIG.binId = localStorage.getItem('jsonbin_binId');
-    
-    // 如果没有 binId，创建一个新的
-    if (!JSONBIN_CONFIG.binId) {
-        await createNewBin();
-    } else {
-        // 从云端加载数据
-        await loadFromCloud();
-    }
-}
-
-// 创建新的 Bin
-async function createNewBin() {
-    try {
-        const response = await fetch(`${JSONBIN_CONFIG.baseUrl}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_CONFIG.apiKey
-            },
-            body: JSON.stringify({
-                records: records,
-                schedules: schedules,
-                createdAt: new Date().toISOString()
-            })
-        });
-        
-        const data = await response.json();
-        if (data.metadata && data.metadata.id) {
-            JSONBIN_CONFIG.binId = data.metadata.id;
-            localStorage.setItem('jsonbin_binId', JSONBIN_CONFIG.binId);
-            console.log('云端存储已创建:', JSONBIN_CONFIG.binId);
-        }
-    } catch (error) {
-        console.error('创建云端存储失败:', error);
-    }
-}
-
-// 从云端加载数据
-async function loadFromCloud() {
-    if (!JSONBIN_CONFIG.binId) return;
-    
-    try {
-        const response = await fetch(`${JSONBIN_CONFIG.baseUrl}/${JSONBIN_CONFIG.binId}/latest`, {
-            method: 'GET',
-            headers: {
-                'X-Master-Key': JSONBIN_CONFIG.apiKey
-            }
-        });
-        
-        const data = await response.json();
-        if (data.record) {
-            // 比较时间戳，选择更新的数据
-            const cloudRecords = data.record.records || [];
-            const cloudSchedules = data.record.schedules || [];
-            
-            // 如果云端数据更新，则覆盖本地数据
-            if (cloudRecords.length > records.length || cloudSchedules.length > schedules.length) {
-                records = cloudRecords;
-                schedules = cloudSchedules;
-                localStorage.setItem('records', JSON.stringify(records));
-                localStorage.setItem('schedules', JSON.stringify(schedules));
-                console.log('已从云端同步数据');
-            }
-        }
-    } catch (error) {
-        console.error('从云端加载数据失败:', error);
-    }
-}
-
-// 同步数据到云端
-async function syncToCloud() {
-    if (!JSONBIN_CONFIG.binId || isSyncing) return;
-    
-    isSyncing = true;
-    updateSyncStatus();
-    
-    try {
-        await fetch(`${JSONBIN_CONFIG.baseUrl}/${JSONBIN_CONFIG.binId}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Master-Key': JSONBIN_CONFIG.apiKey
-            },
-            body: JSON.stringify({
-                records: records,
-                schedules: schedules,
-                updatedAt: new Date().toISOString()
-            })
-        });
-        
-        lastSyncTime = new Date().toISOString();
-        localStorage.setItem('lastSyncTime', lastSyncTime);
-        console.log('数据已同步到云端');
-    } catch (error) {
-        console.error('同步到云端失败:', error);
-    } finally {
-        isSyncing = false;
-        updateSyncStatus();
-    }
-}
-
-// 更新同步状态显示
-function updateSyncStatus() {
-    const statusEl = document.getElementById('sync-status');
-    if (!statusEl) return;
-    
-    if (isSyncing) {
-        statusEl.textContent = '同步中...';
-        statusEl.className = 'sync-status syncing';
-    } else if (lastSyncTime) {
-        const time = new Date(lastSyncTime);
-        const timeStr = time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-        statusEl.textContent = `上次同步: ${timeStr}`;
-        statusEl.className = 'sync-status synced';
-    } else {
-        statusEl.textContent = '未同步';
-        statusEl.className = 'sync-status unsynced';
-    }
-}
 
 // 从记录重新同步日程
 function syncSchedulesFromRecords() {
@@ -233,9 +93,6 @@ function initRecordTab() {
 
         recordInput.value = '';
         renderRecords();
-        
-        // 同步到云端
-        syncToCloud();
     });
 }
 
@@ -495,9 +352,6 @@ function deleteRecord(id) {
 
     renderRecords();
     renderSchedules();
-    
-    // 同步到云端
-    syncToCloud();
 }
 
 // 日程页面初始化
@@ -615,9 +469,6 @@ function deleteSchedule(id) {
 
     renderSchedules();
     renderRecords();
-    
-    // 同步到云端
-    syncToCloud();
 }
 
 // 获取日期标签

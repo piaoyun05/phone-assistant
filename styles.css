@@ -36,33 +36,6 @@ body {
     text-align: center;
 }
 
-.sync-status {
-    text-align: center;
-    font-size: 12px;
-    padding: 4px 12px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-    display: inline-block;
-    margin-left: auto;
-    margin-right: auto;
-    width: fit-content;
-}
-
-.sync-status.syncing {
-    background: rgba(255, 193, 7, 0.2);
-    color: #ffc107;
-}
-
-.sync-status.synced {
-    background: rgba(40, 167, 69, 0.2);
-    color: #28a745;
-}
-
-.sync-status.unsynced {
-    background: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.8);
-}
-
 .tab-buttons {
     display: flex;
     gap: 8px;
