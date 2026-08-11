@@ -73,7 +73,7 @@ body {
     display: block;
 }
 
-/* 记录页面样式 */
+/* 记录页面 */
 .input-section {
     background: #f8f9fa;
     padding: 16px;
@@ -115,6 +115,11 @@ body {
     transform: scale(0.98);
 }
 
+.primary-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .records-list {
     background: white;
 }
@@ -131,13 +136,23 @@ body {
     border-radius: 8px;
     margin-bottom: 10px;
     border-left: 4px solid #667eea;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.record-content {
+.record-item .record-content {
+    flex: 1;
     color: #333;
     font-size: 15px;
     line-height: 1.5;
-    margin-bottom: 6px;
+}
+
+.record-item .record-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-end;
 }
 
 .record-time {
@@ -145,7 +160,7 @@ body {
     font-size: 12px;
 }
 
-/* 日程页面样式 */
+/* 日程页面 */
 .schedule-header {
     display: flex;
     justify-content: space-between;
@@ -229,7 +244,7 @@ body {
     flex: 1;
 }
 
-/* 问答页面样式 */
+/* 问答页面 */
 .qa-section {
     display: flex;
     flex-direction: column;
@@ -262,6 +277,7 @@ body {
     border-radius: 16px;
     font-size: 15px;
     line-height: 1.5;
+    white-space: pre-wrap;
 }
 
 .qa-message.user .qa-bubble {
@@ -302,6 +318,7 @@ body {
     padding: 12px 24px;
 }
 
+/* 通用 */
 .empty-state {
     text-align: center;
     padding: 40px 20px;
@@ -313,30 +330,11 @@ body {
     margin-bottom: 12px;
 }
 
-/* 删除按钮 */
-.record-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.record-item .record-content {
-    flex: 1;
-    margin-bottom: 0;
-}
-
-.record-item .record-meta {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
 .delete-btn {
     background: none;
     border: none;
     color: #e74c3c;
-    font-size: 18px;
+    font-size: 14px;
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 6px;
@@ -345,75 +343,4 @@ body {
 
 .delete-btn:active {
     background: rgba(231, 76, 60, 0.1);
-}
-
-.schedule-item .delete-btn {
-    flex-shrink: 0;
-}
-
-/* 设置页面 */
-.settings-section {
-    padding: 8px 0;
-}
-
-.settings-section h3 {
-    font-size: 18px;
-    margin-bottom: 16px;
-    color: #333;
-}
-
-.setting-item {
-    margin-bottom: 16px;
-}
-
-.setting-item label {
-    display: block;
-    font-size: 14px;
-    color: #666;
-    margin-bottom: 6px;
-    font-weight: 500;
-}
-
-.setting-item input {
-    width: 100%;
-    padding: 12px;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    font-size: 15px;
-    font-family: inherit;
-}
-
-.setting-item input:focus {
-    outline: none;
-    border-color: #667eea;
-}
-
-.setting-tip {
-    margin-top: 16px;
-    padding: 12px;
-    background: #f0f4ff;
-    border-radius: 8px;
-}
-
-.setting-tip p {
-    font-size: 13px;
-    color: #666;
-    line-height: 1.5;
-}
-
-/* AI 加载状态 */
-.ai-loading {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    border: 2px solid #ccc;
-    border-top-color: #667eea;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-right: 6px;
-    vertical-align: middle;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
 }

@@ -9,8 +9,9 @@ const aiConfig = {
     model: 'deepseek-v4-flash'
 };
 
-// AI 同步状态标记
+// 状态标记
 let hasAISynced = false;
+let isAsking = false; // 防止问答并发
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -22,72 +23,120 @@ document.addEventListener('DOMContentLoaded', function() {
     renderSchedules();
 });
 
-// 从记录重新同步日程
+// 安全解析 AI 返回的 JSON（去除 markdown 代码块）
+function parseAIJSON(text) {
+    let cleaned = text.trim();
+    // 去除 ```json ... ``` 或 ``` ... ```
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
+    return JSON.parse(cleaned);
+}
+
+// 调用 AI API（带超时）
+async function callAI(prompt, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const requestBody = {
+            model: aiConfig.model,
+            messages: [
+                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。只返回JSON，不要其他说明。' },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.3
+        };
+
+        const response = await fetch(aiConfig.endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${aiConfig.apiKey}`
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('AI 请求超时，请检查网络');
+        }
+        throw error;
+    }
+}
+
+// 生成唯一 ID
+function generateId() {
+    return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+// 从记录重新同步日程（手动触发）
 async function syncSchedulesFromRecords() {
     schedules = [];
-    
-    // 如果配置了 AI，使用 AI 解析所有记录
+
     if (aiConfig.apiKey && aiConfig.endpoint) {
         await syncSchedulesWithAI();
     } else {
-        // 使用本地解析
         records.forEach(record => {
             const extracted = parseSchedules(record.content);
-            extracted.forEach(s => {
-                s.recordId = record.id;
-            });
+            extracted.forEach(s => { s.recordId = record.id; });
             schedules.push(...extracted);
         });
     }
-    
+
     localStorage.setItem('schedules', JSON.stringify(schedules));
 }
 
 // 使用 AI 同步所有记录的日程
 async function syncSchedulesWithAI() {
-    const allTexts = records.map(r => ({
-        id: r.id,
-        content: r.content
-    }));
-    
-    if (allTexts.length === 0) return;
-    
-    const prompt = `请分析以下记录列表，提取其中所有的日程安排信息。返回 JSON 数组格式，每个元素包含：
-- recordId: 对应记录的 id
-- title: 事项标题（简短描述）
-- datetime: ISO 格式的日期时间字符串
+    if (records.length === 0) return;
 
-如果没有日程安排，返回空数组 []。
+    const allTexts = records.map(r => ({ id: r.id, content: r.content }));
+
+    const prompt = `请分析以下记录列表，提取其中所有的日程安排信息。返回 JSON 数组，每个元素包含：
+- recordId: 对应记录的 id
+- title: 事项标题
+- datetime: ISO 格式日期时间
+
+没有日程返回空数组 []。
 
 记录列表：
-${JSON.stringify(allTexts, null, 2)}
+${JSON.stringify(allTexts)}
 
-只返回 JSON，不要其他说明。`;
+只返回 JSON。`;
 
     try {
         const response = await callAI(prompt);
-        const schedulesData = JSON.parse(response);
-        
+        const schedulesData = parseAIJSON(response);
+
         if (Array.isArray(schedulesData)) {
             schedulesData.forEach(s => {
-                schedules.push({
-                    id: Date.now() + Math.random(),
-                    title: s.title,
-                    datetime: s.datetime,
-                    recordId: s.recordId,
-                    timestamp: new Date().toISOString()
-                });
+                if (s.recordId && s.datetime) {
+                    schedules.push({
+                        id: generateId(),
+                        title: s.title || '',
+                        datetime: s.datetime,
+                        recordId: s.recordId,
+                        timestamp: new Date().toISOString()
+                    });
+                }
             });
-            console.log('AI 同步日程完成，识别到', schedulesData.length, '个日程');
         }
     } catch (error) {
         console.error('AI 同步日程失败:', error);
         // 降级到本地解析
         records.forEach(record => {
             const extracted = parseSchedules(record.content);
-            extracted.forEach(s => {
-                s.recordId = record.id;
-            });
+            extracted.forEach(s => { s.recordId = record.id; });
             schedules.push(...extracted);
         });
     }
@@ -108,7 +157,6 @@ function initTabs() {
             btn.classList.add('active');
             document.getElementById(`${targetTab}-tab`).classList.add('active');
 
-            // 切换到日程页面时，仅在第一次进行 AI 同步
             if (targetTab === 'schedule' && !hasAISynced) {
                 await syncSchedulesFromRecords();
                 hasAISynced = true;
@@ -130,7 +178,10 @@ function initRecordTab() {
             return;
         }
 
-        // 保存记录
+        // 禁用按钮防止重复点击
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中...';
+
         const record = {
             id: Date.now(),
             content: content,
@@ -142,36 +193,42 @@ function initRecordTab() {
         recordInput.value = '';
         renderRecords();
 
-        // 保存时立即用 AI 解析该条记录的日程（仅一次）
+        // AI 解析日程
         await parseSchedulesWithAI(content, record.id);
+
+        // 恢复按钮
+        saveBtn.disabled = false;
+        saveBtn.textContent = '保存记录';
     });
 }
 
 // 使用 AI 解析单条记录的日程
 async function parseSchedulesWithAI(text, recordId) {
-    const prompt = `请分析以下文本，提取其中的日程安排信息。如果文本中包含时间相关的安排，请返回 JSON 数组格式，每个元素包含：
-- title: 事项标题（简短描述）
-- datetime: ISO 格式的日期时间字符串
+    const prompt = `请分析以下文本，提取其中的日程安排信息。返回 JSON 数组，每个元素包含：
+- title: 事项标题
+- datetime: ISO 格式日期时间
 
-如果没有日程安排，返回空数组 []。
+没有日程返回空数组 []。
 
 文本：${text}
 
-只返回 JSON，不要其他说明。`;
+只返回 JSON。`;
 
     try {
         const response = await callAI(prompt);
-        const schedulesData = JSON.parse(response);
+        const schedulesData = parseAIJSON(response);
 
         if (Array.isArray(schedulesData) && schedulesData.length > 0) {
             schedulesData.forEach(s => {
-                schedules.push({
-                    id: Date.now() + Math.random(),
-                    title: s.title,
-                    datetime: s.datetime,
-                    recordId: recordId,
-                    timestamp: new Date().toISOString()
-                });
+                if (s.datetime) {
+                    schedules.push({
+                        id: generateId(),
+                        title: s.title || '',
+                        datetime: s.datetime,
+                        recordId: recordId,
+                        timestamp: new Date().toISOString()
+                    });
+                }
             });
             localStorage.setItem('schedules', JSON.stringify(schedules));
             hasAISynced = true;
@@ -192,101 +249,63 @@ async function parseSchedulesWithAI(text, recordId) {
     }
 }
 
-// 调用 AI API
-async function callAI(prompt) {
-    try {
-        const requestBody = {
-            model: aiConfig.model,
-            messages: [
-                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
-                { role: 'user', content: prompt }
-            ],
-            temperature: 0.3
-        };
-
-        const response = await fetch(aiConfig.endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${aiConfig.apiKey}`
-            },
-            body: JSON.stringify(requestBody)
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
-        }
-
-        const data = await response.json();
-        return data.choices[0].message.content;
-    } catch (error) {
-        console.error('AI 调用错误:', error);
-        throw error;
-    }
+// HTML 转义（高性能版）
+const escapeMap = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, ch => escapeMap[ch]);
 }
 
 // 解析日程 - 增强版
 function parseSchedules(text) {
-    const schedules = [];
+    const result = [];
     const now = new Date();
-    let match;
 
-    // 提取事项标题（去掉时间部分）
     function extractTitle(text, timePattern) {
         let title = text.replace(timePattern, '').trim();
         title = title.replace(/^[,，、\s]+/, '').trim();
         return title || text;
     }
 
-    // 今天
-    if (match = text.match(/今天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
-        const hour = parseInt(match[1]);
-        const minute = match[2] ? parseInt(match[2]) : 0;
-        const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
-        const date = new Date(now);
-        date.setHours(adjustedHour, minute, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            title: extractTitle(text, /今天.*?\d{1,2}[点:：]\d{0,2}/),
+    function pushSchedule(title, date) {
+        result.push({
+            id: generateId(),
+            title: title,
             datetime: date.toISOString(),
             timestamp: new Date().toISOString()
         });
+    }
+
+    // 今天
+    let match;
+    if (match = text.match(/今天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
+        const hour = parseInt(match[1]);
+        const minute = match[2] ? parseInt(match[2]) : 0;
+        const adjustedHour = (text.includes('下午') || text.includes('晚上')) ? hour + 12 : hour;
+        const date = new Date(now);
+        date.setHours(adjustedHour, minute, 0, 0);
+        pushSchedule(extractTitle(text, /今天.*?\d{1,2}[点:：]\d{0,2}/), date);
     }
 
     // 明天
     if (match = text.match(/明天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
         const hour = parseInt(match[1]);
         const minute = match[2] ? parseInt(match[2]) : 0;
-        const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
+        const adjustedHour = (text.includes('下午') || text.includes('晚上')) ? hour + 12 : hour;
         const date = new Date(now);
         date.setDate(date.getDate() + 1);
         date.setHours(adjustedHour, minute, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            title: extractTitle(text, /明天.*?\d{1,2}[点:：]\d{0,2}/),
-            datetime: date.toISOString(),
-            timestamp: new Date().toISOString()
-        });
+        pushSchedule(extractTitle(text, /明天.*?\d{1,2}[点:：]\d{0,2}/), date);
     }
 
     // 后天
     if (match = text.match(/后天(?:下午|晚上|上午|早上)?(\d{1,2})[点:：](\d{0,2})/)) {
         const hour = parseInt(match[1]);
         const minute = match[2] ? parseInt(match[2]) : 0;
-        const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
+        const adjustedHour = (text.includes('下午') || text.includes('晚上')) ? hour + 12 : hour;
         const date = new Date(now);
         date.setDate(date.getDate() + 2);
         date.setHours(adjustedHour, minute, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            title: extractTitle(text, /后天.*?\d{1,2}[点:：]\d{0,2}/),
-            datetime: date.toISOString(),
-            timestamp: new Date().toISOString()
-        });
+        pushSchedule(extractTitle(text, /后天.*?\d{1,2}[点:：]\d{0,2}/), date);
     }
 
     // 下周一到周日
@@ -295,41 +314,27 @@ function parseSchedules(text) {
         const targetDay = dayMap[match[1]];
         const hour = parseInt(match[2]);
         const minute = match[3] ? parseInt(match[3]) : 0;
-        const adjustedHour = text.includes('下午') || text.includes('晚上') ? hour + 12 : hour;
-
+        const adjustedHour = (text.includes('下午') || text.includes('晚上')) ? hour + 12 : hour;
         const date = new Date(now);
         const currentDay = date.getDay();
         const daysUntilNext = (targetDay - currentDay + 7) % 7 + 7;
         date.setDate(date.getDate() + daysUntilNext);
         date.setHours(adjustedHour, minute, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            title: extractTitle(text, /下周[一二三四五六日天].*?\d{1,2}[点:：]\d{0,2}/),
-            datetime: date.toISOString(),
-            timestamp: new Date().toISOString()
-        });
+        pushSchedule(extractTitle(text, /下周[一二三四五六日天].*?\d{1,2}[点:：]\d{0,2}/), date);
     }
 
-    // 具体日期 2024-01-15 或 2024/01/15
+    // 具体日期
     if (match = text.match(/(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})(?:.*?)(\d{1,2})[点:：](\d{0,2})/)) {
         const year = parseInt(match[1]);
         const month = parseInt(match[2]) - 1;
         const day = parseInt(match[3]);
         const hour = parseInt(match[4]);
         const minute = match[5] ? parseInt(match[5]) : 0;
-
         const date = new Date(year, month, day, hour, minute, 0, 0);
-
-        schedules.push({
-            id: Date.now() + Math.random(),
-            title: extractTitle(text, /\d{4}[-\/]\d{1,2}[-\/]\d{1,2}.*?\d{1,2}[点:：]\d{0,2}/),
-            datetime: date.toISOString(),
-            timestamp: new Date().toISOString()
-        });
+        pushSchedule(extractTitle(text, /\d{4}[-\/]\d{1,2}[-\/]\d{1,2}.*?\d{1,2}[点:：]\d{0,2}/), date);
     }
 
-    return schedules;
+    return result;
 }
 
 // 渲染记录列表
@@ -337,32 +342,25 @@ function renderRecords() {
     const container = document.getElementById('records-container');
 
     if (records.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📝</div>
-                <p>还没有记录</p>
-            </div>
-        `;
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p>还没有记录</p></div>';
         return;
     }
+
+    // 预构建日程 recordId 集合，避免 O(n*m) 查找
+    const scheduleRecordIds = new Set(schedules.map(s => s.recordId));
 
     container.innerHTML = records.slice(0, 20).map(record => {
         const time = new Date(record.timestamp);
         const timeStr = `${time.getMonth() + 1}/${time.getDate()} ${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
+        const scheduleIcon = scheduleRecordIds.has(record.id) ? ' 📅' : '';
 
-        // 检查是否有对应的日程
-        const hasSchedule = schedules.some(s => s.recordId === record.id);
-        const scheduleIcon = hasSchedule ? ' 📅' : '';
-
-        return `
-            <div class="record-item">
-                <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
-                <div class="record-meta">
-                    <div class="record-time">${timeStr}</div>
-                    <button class="delete-btn" onclick="deleteRecord(${record.id})">删除</button>
-                </div>
+        return `<div class="record-item">
+            <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
+            <div class="record-meta">
+                <div class="record-time">${timeStr}</div>
+                <button class="delete-btn" onclick="deleteRecord(${record.id})">删除</button>
             </div>
-        `;
+        </div>`;
     }).join('');
 }
 
@@ -371,10 +369,8 @@ function deleteRecord(id) {
     if (!confirm('确定要删除这条记录吗？')) return;
 
     records = records.filter(r => r.id !== id);
-    localStorage.setItem('records', JSON.stringify(records));
-
-    // 同时删除关联的日程
     schedules = schedules.filter(s => s.recordId !== id);
+    localStorage.setItem('records', JSON.stringify(records));
     localStorage.setItem('schedules', JSON.stringify(schedules));
 
     renderRecords();
@@ -395,15 +391,17 @@ function initScheduleTab() {
         });
     });
 
-    refreshBtn.addEventListener('click', async () => {
-        await syncSchedulesFromRecords();
+    refreshBtn.addEventListener('click', () => {
         renderSchedules();
     });
 
     if (syncBtn) {
         syncBtn.addEventListener('click', async () => {
+            syncBtn.textContent = '⏳';
             await syncSchedulesFromRecords();
+            hasAISynced = true;
             renderSchedules();
+            syncBtn.textContent = '🔗';
             alert('日程同步完成');
         });
     }
@@ -415,37 +413,30 @@ function renderSchedules(filter = 'all') {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    let filteredSchedules = [...schedules];
+    let filteredSchedules = schedules;
 
-    // 过滤日程
     if (filter === 'today') {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         filteredSchedules = schedules.filter(s => {
-            const date = new Date(s.datetime);
-            return date >= today && date < tomorrow;
+            const d = new Date(s.datetime);
+            return d >= today && d < tomorrow;
         });
     } else if (filter === 'week') {
         const weekEnd = new Date(today);
         weekEnd.setDate(weekEnd.getDate() + 7);
         filteredSchedules = schedules.filter(s => {
-            const date = new Date(s.datetime);
-            return date >= today && date < weekEnd;
+            const d = new Date(s.datetime);
+            return d >= today && d < weekEnd;
         });
     } else if (filter === 'upcoming') {
         filteredSchedules = schedules.filter(s => new Date(s.datetime) > now);
     }
 
-    // 按时间排序
     filteredSchedules.sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
 
     if (filteredSchedules.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
-                <p>暂无日程</p>
-            </div>
-        `;
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>暂无日程</p></div>';
         return;
     }
 
@@ -455,33 +446,26 @@ function renderSchedules(filter = 'all') {
         const date = new Date(schedule.datetime);
         const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
         if (!groups[dateKey]) {
-            groups[dateKey] = {
-                label: getDateLabel(date),
-                items: []
-            };
+            groups[dateKey] = { label: getDateLabel(date), items: [] };
         }
         groups[dateKey].items.push(schedule);
     });
 
-    // 渲染分组
     let html = '';
     Object.keys(groups).forEach(key => {
         const group = groups[key];
-        html += `<div class="schedule-group">`;
-        html += `<div class="schedule-group-header">${group.label}</div>`;
+        html += `<div class="schedule-group"><div class="schedule-group-header">${group.label}</div>`;
         group.items.forEach(schedule => {
             const date = new Date(schedule.datetime);
             const timeStr = formatTime(date);
-            const title = schedule.title || schedule.content;
-            html += `
-                <div class="schedule-item">
-                    <div class="schedule-time">${timeStr}</div>
-                    <div class="schedule-content">${escapeHtml(title)}</div>
-                    <button class="delete-btn" onclick="deleteSchedule(${schedule.id})">删除</button>
-                </div>
-            `;
+            const title = schedule.title || schedule.content || '';
+            html += `<div class="schedule-item">
+                <div class="schedule-time">${timeStr}</div>
+                <div class="schedule-content">${escapeHtml(title)}</div>
+                <button class="delete-btn" onclick="deleteSchedule(${schedule.id})">删除</button>
+            </div>`;
         });
-        html += `</div>`;
+        html += '</div>';
     });
 
     container.innerHTML = html;
@@ -506,14 +490,11 @@ function getDateLabel(date) {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-    if (dateOnly.getTime() === today.getTime()) {
-        return '今天';
-    } else if (dateOnly.getTime() === tomorrow.getTime()) {
-        return '明天';
-    } else {
-        const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        return `${date.getMonth() + 1}月${date.getDate()}日 ${weekDays[date.getDay()]}`;
-    }
+    if (dateOnly.getTime() === today.getTime()) return '今天';
+    if (dateOnly.getTime() === tomorrow.getTime()) return '明天';
+
+    const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${weekDays[date.getDay()]}`;
 }
 
 // 问答页面初始化
@@ -523,43 +504,43 @@ function initQATab() {
 
     askBtn.addEventListener('click', handleQuestion);
     qaInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            handleQuestion();
-        }
+        if (e.key === 'Enter') handleQuestion();
     });
 
-    // 显示欢迎消息
     addQAMessage('assistant', '你好！我可以帮你查询和整理日程安排。试试问我："明天有什么安排？"或"帮我整理一下这周的日程"');
 }
 
-// 处理问题
+// 处理问题（防并发）
 async function handleQuestion() {
-    const input = document.getElementById('qa-input');
-    const question = input.value.trim();
+    if (isAsking) return;
 
+    const input = document.getElementById('qa-input');
+    const askBtn = document.getElementById('ask-btn');
+    const question = input.value.trim();
     if (!question) return;
+
+    isAsking = true;
+    askBtn.disabled = true;
+    askBtn.textContent = '...';
 
     addQAMessage('user', question);
     input.value = '';
 
-    // 如果配置了 AI，使用 AI 回答
-    if (aiConfig.apiKey && aiConfig.endpoint) {
-        // 显示加载状态
-        const loadingId = Date.now();
-        addQAMessage('assistant', '思考中...', loadingId);
+    const loadingId = Date.now();
+    addQAMessage('assistant', '思考中...', loadingId);
 
-        try {
-            const schedulesSummary = schedules.map(s => {
-                const date = new Date(s.datetime);
-                return `- ${formatDate(date)} ${formatTime(date)}: ${s.title || s.content}`;
-            }).join('\n');
+    try {
+        const schedulesSummary = schedules.map(s => {
+            const date = new Date(s.datetime);
+            return `- ${formatDate(date)} ${formatTime(date)}: ${s.title || s.content}`;
+        }).join('\n');
 
-            const recordsSummary = records.slice(0, 20).map(r => {
-                const time = new Date(r.timestamp);
-                return `- [${time.getMonth()+1}/${time.getDate()}] ${r.content}`;
-            }).join('\n');
+        const recordsSummary = records.slice(0, 20).map(r => {
+            const time = new Date(r.timestamp);
+            return `- [${time.getMonth()+1}/${time.getDate()}] ${r.content}`;
+        }).join('\n');
 
-            const prompt = `你是一个日程管理助手。以下是用户的记录和日程数据：
+        const prompt = `你是一个日程管理助手。以下是用户的记录和日程数据：
 
 【记录列表】
 ${recordsSummary || '暂无记录'}
@@ -571,25 +552,23 @@ ${schedulesSummary || '暂无日程'}
 
 请根据以上数据回答用户的问题。如果没有相关数据，给出友好的提示。回答要简洁明了。`;
 
-            const answer = await callAI(prompt);
-            // 替换加载消息
-            const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
-            if (loadingEl) {
-                loadingEl.querySelector('.qa-bubble').textContent = answer;
-            }
-        } catch (error) {
-            console.error('AI 回答失败:', error);
-            const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
-            if (loadingEl) {
-                loadingEl.querySelector('.qa-bubble').textContent = generateAnswer(question) + '\n\n(AI 回答失败，已使用本地回答)';
-            }
+        const answer = await callAI(prompt);
+        const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
+        if (loadingEl) {
+            loadingEl.querySelector('.qa-bubble').textContent = answer;
         }
-    } else {
-        // 本地回答
-        setTimeout(() => {
-            const answer = generateAnswer(question);
-            addQAMessage('assistant', answer);
-        }, 300);
+    } catch (error) {
+        console.error('AI 回答失败:', error);
+        const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
+        if (loadingEl) {
+            loadingEl.querySelector('.qa-bubble').textContent = generateAnswer(question);
+        }
+    } finally {
+        isAsking = false;
+        askBtn.disabled = false;
+        askBtn.textContent = '提问';
+        const history = document.getElementById('qa-history');
+        history.scrollTop = history.scrollHeight;
     }
 }
 
@@ -598,19 +577,14 @@ function generateAnswer(question) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    // 解析问题
     if (question.includes('今天') || question.includes('今日')) {
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         const todaySchedules = schedules.filter(s => {
-            const date = new Date(s.datetime);
-            return date >= today && date < tomorrow;
+            const d = new Date(s.datetime);
+            return d >= today && d < tomorrow;
         });
-
-        if (todaySchedules.length === 0) {
-            return '今天没有安排日程。';
-        }
-
+        if (todaySchedules.length === 0) return '今天没有安排日程。';
         return `今天有 ${todaySchedules.length} 个日程：\n` +
             todaySchedules.map(s => `• ${formatTime(new Date(s.datetime))} - ${s.title || s.content}`).join('\n');
     }
@@ -620,54 +594,34 @@ function generateAnswer(question) {
         tomorrow.setDate(tomorrow.getDate() + 1);
         const dayAfter = new Date(tomorrow);
         dayAfter.setDate(dayAfter.getDate() + 1);
-
         const tomorrowSchedules = schedules.filter(s => {
-            const date = new Date(s.datetime);
-            return date >= tomorrow && date < dayAfter;
+            const d = new Date(s.datetime);
+            return d >= tomorrow && d < dayAfter;
         });
-
-        if (tomorrowSchedules.length === 0) {
-            return '明天没有安排日程。';
-        }
-
+        if (tomorrowSchedules.length === 0) return '明天没有安排日程。';
         return `明天有 ${tomorrowSchedules.length} 个日程：\n` +
-            tomorrowSchedules.map(s => `• ${formatTime(new Date(s.datetime))} - ${s.content}`).join('\n');
+            tomorrowSchedules.map(s => `• ${formatTime(new Date(s.datetime))} - ${s.title || s.content}`).join('\n');
     }
 
     if (question.includes('这周') || question.includes('本周') || question.includes('星期')) {
         const weekEnd = new Date(today);
         weekEnd.setDate(weekEnd.getDate() + 7);
         const weekSchedules = schedules.filter(s => {
-            const date = new Date(s.datetime);
-            return date >= today && date < weekEnd;
+            const d = new Date(s.datetime);
+            return d >= today && d < weekEnd;
         });
-
-        if (weekSchedules.length === 0) {
-            return '这周没有安排日程。';
-        }
-
+        if (weekSchedules.length === 0) return '这周没有安排日程。';
         return `这周有 ${weekSchedules.length} 个日程：\n` +
-            weekSchedules.map(s => {
-                const date = new Date(s.datetime);
-                return `• ${formatDate(date)} - ${s.content}`;
-            }).join('\n');
+            weekSchedules.map(s => `• ${formatDate(new Date(s.datetime))} - ${s.title || s.content}`).join('\n');
     }
 
     if (question.includes('所有') || question.includes('全部') || question.includes('日程')) {
-        const upcomingSchedules = schedules.filter(s => new Date(s.datetime) > now);
-
-        if (upcomingSchedules.length === 0) {
-            return '目前没有未来的日程安排。';
-        }
-
-        return `共有 ${upcomingSchedules.length} 个未来日程：\n` +
-            upcomingSchedules.map(s => {
-                const date = new Date(s.datetime);
-                return `• ${formatDate(date)} - ${s.content}`;
-            }).join('\n');
+        const upcoming = schedules.filter(s => new Date(s.datetime) > now);
+        if (upcoming.length === 0) return '目前没有未来的日程安排。';
+        return `共有 ${upcoming.length} 个未来日程：\n` +
+            upcoming.map(s => `• ${formatDate(new Date(s.datetime))} - ${s.title || s.content}`).join('\n');
     }
 
-    // 默认回答
     return '我可以帮你查询日程。试试问我：\n• "今天有什么安排？"\n• "明天有哪些事？"\n• "这周的日程"\n• "所有日程"';
 }
 
@@ -676,9 +630,7 @@ function addQAMessage(role, content, msgId = null) {
     const history = document.getElementById('qa-history');
     const messageDiv = document.createElement('div');
     messageDiv.className = `qa-message ${role}`;
-    if (msgId) {
-        messageDiv.setAttribute('data-msg-id', msgId);
-    }
+    if (msgId) messageDiv.setAttribute('data-msg-id', msgId);
 
     const bubble = document.createElement('div');
     bubble.className = 'qa-bubble';
@@ -686,8 +638,6 @@ function addQAMessage(role, content, msgId = null) {
 
     messageDiv.appendChild(bubble);
     history.appendChild(messageDiv);
-
-    // 滚动到底部
     history.scrollTop = history.scrollHeight;
 }
 
@@ -697,33 +647,19 @@ function formatDate(date) {
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-
     const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
     let dayStr;
-    if (dateOnly.getTime() === today.getTime()) {
-        dayStr = '今天';
-    } else if (dateOnly.getTime() === tomorrow.getTime()) {
-        dayStr = '明天';
-    } else {
+    if (dateOnly.getTime() === today.getTime()) dayStr = '今天';
+    else if (dateOnly.getTime() === tomorrow.getTime()) dayStr = '明天';
+    else {
         const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
         dayStr = `${date.getMonth() + 1}月${date.getDate()}日 ${weekDays[date.getDay()]}`;
     }
 
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-
-    return `${dayStr} ${hours}:${minutes}`;
+    return `${dayStr} ${formatTime(date)}`;
 }
 
 function formatTime(date) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
