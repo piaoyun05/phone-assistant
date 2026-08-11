@@ -2,8 +2,12 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// AI 配置
-let aiConfig = JSON.parse(localStorage.getItem('aiConfig') || '{}');
+// AI 配置（已内置）
+const aiConfig = {
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
+    model: 'deepseek-v4-flash'
+};
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -11,7 +15,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initRecordTab();
     initScheduleTab();
     initQATab();
-    initSettingsTab();
     renderRecords();
     renderSchedules();
 });
@@ -720,58 +723,6 @@ function addQAMessage(role, content, msgId = null) {
 
     // 滚动到底部
     history.scrollTop = history.scrollHeight;
-}
-
-// 设置页面初始化
-function initSettingsTab() {
-    const saveBtn = document.getElementById('save-settings-btn');
-    const testBtn = document.getElementById('test-ai-btn');
-    const endpointInput = document.getElementById('api-endpoint');
-    const apiKeyInput = document.getElementById('api-key');
-    const modelInput = document.getElementById('model-name');
-    const useProxyInput = document.getElementById('use-proxy');
-
-    // 加载已保存的配置
-    if (aiConfig.endpoint) endpointInput.value = aiConfig.endpoint;
-    if (aiConfig.apiKey) apiKeyInput.value = aiConfig.apiKey;
-    if (aiConfig.model) modelInput.value = aiConfig.model;
-    if (aiConfig.useProxy === 'true') useProxyInput.checked = true;
-
-    saveBtn.addEventListener('click', () => {
-        aiConfig = {
-            endpoint: endpointInput.value.trim(),
-            apiKey: apiKeyInput.value.trim(),
-            model: modelInput.value.trim() || 'gpt-3.5-turbo',
-            useProxy: useProxyInput.checked ? 'true' : 'false'
-        };
-        localStorage.setItem('aiConfig', JSON.stringify(aiConfig));
-        alert('设置已保存');
-    });
-
-    // 测试 AI 连接
-    testBtn.addEventListener('click', async () => {
-        const endpoint = endpointInput.value.trim();
-        const apiKey = apiKeyInput.value.trim();
-        const model = modelInput.value.trim() || 'gpt-3.5-turbo';
-
-        if (!endpoint || !apiKey) {
-            alert('请先填写 API 端点和 API Key');
-            return;
-        }
-
-        testBtn.textContent = '测试中...';
-        testBtn.disabled = true;
-
-        try {
-            const response = await callAI('请回复"连接成功"');
-            alert(`AI 连接成功！\n\n回复：${response}`);
-        } catch (error) {
-            alert(`AI 连接失败：\n\n${error.message}\n\n建议：\n1. 检查 API 端点和 Key 是否正确\n2. 如果是 CORS 错误，请勾选"使用代理模式"并部署后端代理服务器`);
-        } finally {
-            testBtn.textContent = '测试 AI 连接';
-            testBtn.disabled = false;
-        }
-    });
 }
 
 // 工具函数
