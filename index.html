@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>手机记录助手</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <h1>📝 记录助手</h1>
+            <div class="tab-buttons">
+                <button class="tab-btn active" data-tab="record">记录</button>
+                <button class="tab-btn" data-tab="schedule">日程</button>
+                <button class="tab-btn" data-tab="qa">问答</button>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <!-- 记录页面 -->
+            <div id="record-tab" class="tab-content active">
+                <div class="input-section">
+                    <textarea id="record-input" placeholder="输入你要记录的内容...&#10;例如：明天下午3点开会&#10;下周一上午10点面试"></textarea>
+                    <button id="save-btn" class="primary-btn">保存记录</button>
+                </div>
+                <div class="records-list">
+                    <h3>最近记录</h3>
+                    <div id="records-container"></div>
+                </div>
+            </div>
+
+            <!-- 日程页面 -->
+            <div id="schedule-tab" class="tab-content">
+                <div class="schedule-header">
+                    <h3>我的日程</h3>
+                    <button id="refresh-schedule-btn" class="icon-btn">🔄</button>
+                </div>
+                <div class="schedule-filters">
+                    <button class="filter-btn active" data-filter="all">全部</button>
+                    <button class="filter-btn" data-filter="today">今天</button>
+                    <button class="filter-btn" data-filter="week">本周</button>
+                    <button class="filter-btn" data-filter="upcoming">未来</button>
+                </div>
+                <div id="schedule-container"></div>
+            </div>
+
+            <!-- 问答页面 -->
+            <div id="qa-tab" class="tab-content">
+                <div class="qa-section">
+                    <div id="qa-history"></div>
+                    <div class="qa-input-section">
+                        <input type="text" id="qa-input" placeholder="提问关于你的日程...&#10;例如：明天有什么安排？">
+                        <button id="ask-btn" class="primary-btn">提问</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
