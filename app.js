@@ -9,6 +9,9 @@ const aiConfig = {
     model: 'deepseek-v4-flash'
 };
 
+// AI 同步状态标记
+let hasAISynced = false;
+
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
     initTabs();
@@ -105,9 +108,10 @@ function initTabs() {
             btn.classList.add('active');
             document.getElementById(`${targetTab}-tab`).classList.add('active');
 
-            // 切换到日程页面时自动同步
-            if (targetTab === 'schedule') {
+            // 切换到日程页面时，仅在第一次进行 AI 同步
+            if (targetTab === 'schedule' && !hasAISynced) {
                 await syncSchedulesFromRecords();
+                hasAISynced = true;
                 renderSchedules();
             }
         });
