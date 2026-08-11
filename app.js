@@ -2,11 +2,10 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// AI 配置（已内置）
+// AI 配置（使用后端代理，API Key 隐藏在服务端）
 const aiConfig = {
-    endpoint: 'https://api.deepseek.com/v1/chat/completions',
-    apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
-    model: 'deepseek-v4-flash'
+    endpoint: '/api/ai',
+    model: 'deepseek-chat'
 };
 
 // 状态标记
@@ -31,40 +30,33 @@ function parseAIJSON(text) {
     return JSON.parse(cleaned);
 }
 
-// 调用 AI API（带超时）
+// 调用 AI API（通过后端代理，API Key 隐藏在服务端）
 async function callAI(prompt, timeoutMs = 15000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        const requestBody = {
-            model: aiConfig.model,
-            messages: [
-                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。只返回JSON，不要其他说明。' },
-                { role: 'user', content: prompt }
-            ],
-            temperature: 0.3
-        };
-
         const response = await fetch(aiConfig.endpoint, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${aiConfig.apiKey}`
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestBody),
+            body: JSON.stringify({
+                prompt: prompt,
+                model: aiConfig.model
+            }),
             signal: controller.signal
         });
 
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
+            const errorData = await response.json();
+            throw new Error(errorData.error || `API 请求失败 (${response.status})`);
         }
 
         const data = await response.json();
-        return data.choices[0].message.content;
+        return data.content;
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
