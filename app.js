@@ -206,40 +206,20 @@ async function parseSchedulesWithAI(text, recordId) {
 // 调用 AI API
 async function callAI(prompt) {
     try {
-        // 检查是否使用代理模式
-        const useProxy = aiConfig.useProxy === 'true';
-        let url, requestBody;
+        const requestBody = {
+            model: aiConfig.model,
+            messages: [
+                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.3
+        };
 
-        if (useProxy) {
-            // 使用后端代理
-            url = '/api/ai';
-            requestBody = {
-                endpoint: aiConfig.endpoint,
-                apiKey: aiConfig.apiKey,
-                model: aiConfig.model || 'gpt-3.5-turbo',
-                messages: [
-                    { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
-                    { role: 'user', content: prompt }
-                ]
-            };
-        } else {
-            // 直接调用 API
-            url = aiConfig.endpoint;
-            requestBody = {
-                model: aiConfig.model || 'gpt-3.5-turbo',
-                messages: [
-                    { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
-                    { role: 'user', content: prompt }
-                ],
-                temperature: 0.3
-            };
-        }
-
-        const response = await fetch(url, {
+        const response = await fetch(aiConfig.endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                ...(useProxy ? {} : { 'Authorization': `Bearer ${aiConfig.apiKey}` })
+                'Authorization': `Bearer ${aiConfig.apiKey}`
             },
             body: JSON.stringify(requestBody)
         });
@@ -252,10 +232,7 @@ async function callAI(prompt) {
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (error) {
-        // 如果是 CORS 错误，提供更详细的提示
-        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-            throw new Error('网络请求失败，可能是 CORS 跨域限制。请在设置中启用"使用代理模式"，并部署后端代理服务器。');
-        }
+        console.error('AI 调用错误:', error);
         throw error;
     }
 }
