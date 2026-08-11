@@ -1,6 +1,6 @@
 // JSONBin 配置
 const JSONBIN_CONFIG = {
-    apiKey: '$2a$10$fizfAhvc4jv/XffsTs5nP.GQDaeWTI4Ufu4zdqGjYHB/XhGD2oG46',
+    apiKey: '$2a$10$VTKrChWi/xQAssnzQndoseXK06UdJQ1HSuL/qVxkhIA/SWvvo3uvu',
     binId: null, // 会在首次使用时自动创建
     baseUrl: 'https://api.jsonbin.io/v3/b'
 };
