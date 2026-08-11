@@ -2,12 +2,16 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
+// AI 配置
+let aiConfig = JSON.parse(localStorage.getItem('aiConfig') || '{}');
+
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
     initTabs();
     initRecordTab();
     initScheduleTab();
     initQATab();
+    initSettingsTab();
     renderRecords();
     renderSchedules();
 });
@@ -70,21 +74,98 @@ function initRecordTab() {
         records.unshift(record);
         localStorage.setItem('records', JSON.stringify(records));
 
-        // 解析日程
-        const extractedSchedules = parseSchedules(content);
-        if (extractedSchedules.length > 0) {
-            extractedSchedules.forEach(s => { s.recordId = record.id; });
-            schedules.push(...extractedSchedules);
-            localStorage.setItem('schedules', JSON.stringify(schedules));
-            renderSchedules();
-            alert(`已保存记录，并识别到 ${extractedSchedules.length} 个日程`);
+        // 使用 AI 解析日程
+        if (aiConfig.apiKey && aiConfig.endpoint) {
+            parseSchedulesWithAI(content, record.id);
         } else {
-            alert('记录已保存');
+            // 使用本地解析
+            const extractedSchedules = parseSchedules(content);
+            if (extractedSchedules.length > 0) {
+                extractedSchedules.forEach(s => { s.recordId = record.id; });
+                schedules.push(...extractedSchedules);
+                localStorage.setItem('schedules', JSON.stringify(schedules));
+                renderSchedules();
+                alert(`已保存记录，并识别到 ${extractedSchedules.length} 个日程`);
+            } else {
+                alert('记录已保存');
+            }
         }
 
         recordInput.value = '';
         renderRecords();
     });
+}
+
+// 使用 AI 解析日程
+async function parseSchedulesWithAI(text, recordId) {
+    const prompt = `请分析以下文本，提取其中的日程安排信息。如果文本中包含时间相关的安排，请返回 JSON 数组格式，每个元素包含：
+- title: 事项标题（简短描述）
+- datetime: ISO 格式的日期时间字符串
+
+如果没有日程安排，返回空数组 []。
+
+文本：${text}
+
+只返回 JSON，不要其他说明。`;
+
+    try {
+        const response = await callAI(prompt);
+        const schedulesData = JSON.parse(response);
+
+        if (Array.isArray(schedulesData) && schedulesData.length > 0) {
+            schedulesData.forEach(s => {
+                schedules.push({
+                    id: Date.now() + Math.random(),
+                    title: s.title,
+                    datetime: s.datetime,
+                    recordId: recordId,
+                    timestamp: new Date().toISOString()
+                });
+            });
+            localStorage.setItem('schedules', JSON.stringify(schedules));
+            renderSchedules();
+            alert(`已保存记录，AI 识别到 ${schedulesData.length} 个日程`);
+        } else {
+            alert('记录已保存');
+        }
+    } catch (error) {
+        console.error('AI 解析失败:', error);
+        // 降级到本地解析
+        const extractedSchedules = parseSchedules(text);
+        if (extractedSchedules.length > 0) {
+            extractedSchedules.forEach(s => { s.recordId = recordId; });
+            schedules.push(...extractedSchedules);
+            localStorage.setItem('schedules', JSON.stringify(schedules));
+            renderSchedules();
+        }
+        alert('记录已保存（AI 解析失败，使用本地解析）');
+    }
+}
+
+// 调用 AI API
+async function callAI(prompt) {
+    const response = await fetch(aiConfig.endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${aiConfig.apiKey}`
+        },
+        body: JSON.stringify({
+            model: aiConfig.model || 'gpt-3.5-turbo',
+            messages: [
+                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.3
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
 }
 
 // 解析日程 - 增强版
@@ -218,10 +299,28 @@ function renderRecords() {
         return `
             <div class="record-item">
                 <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
-                <div class="record-time">${timeStr}</div>
+                <div class="record-meta">
+                    <div class="record-time">${timeStr}</div>
+                    <button class="delete-btn" onclick="deleteRecord(${record.id})">删除</button>
+                </div>
             </div>
         `;
     }).join('');
+}
+
+// 删除记录
+function deleteRecord(id) {
+    if (!confirm('确定要删除这条记录吗？')) return;
+
+    records = records.filter(r => r.id !== id);
+    localStorage.setItem('records', JSON.stringify(records));
+
+    // 同时删除关联的日程
+    schedules = schedules.filter(s => s.recordId !== id);
+    localStorage.setItem('schedules', JSON.stringify(schedules));
+
+    renderRecords();
+    renderSchedules();
 }
 
 // 日程页面初始化
@@ -320,6 +419,7 @@ function renderSchedules(filter = 'all') {
                 <div class="schedule-item">
                     <div class="schedule-time">${timeStr}</div>
                     <div class="schedule-content">${escapeHtml(title)}</div>
+                    <button class="delete-btn" onclick="deleteSchedule(${schedule.id})">删除</button>
                 </div>
             `;
         });
@@ -327,6 +427,17 @@ function renderSchedules(filter = 'all') {
     });
 
     container.innerHTML = html;
+}
+
+// 删除日程
+function deleteSchedule(id) {
+    if (!confirm('确定要删除这条日程吗？')) return;
+
+    schedules = schedules.filter(s => s.id !== id);
+    localStorage.setItem('schedules', JSON.stringify(schedules));
+
+    renderSchedules();
+    renderRecords();
 }
 
 // 获取日期标签
@@ -360,11 +471,11 @@ function initQATab() {
     });
 
     // 显示欢迎消息
-    addQAMessage('assistant', '你好！我可以帮你查询日程安排。试试问我："明天有什么安排？"或"这周有哪些事情？"');
+    addQAMessage('assistant', '你好！我可以帮你查询和整理日程安排。试试问我："明天有什么安排？"或"帮我整理一下这周的日程"');
 }
 
 // 处理问题
-function handleQuestion() {
+async function handleQuestion() {
     const input = document.getElementById('qa-input');
     const question = input.value.trim();
 
@@ -373,11 +484,55 @@ function handleQuestion() {
     addQAMessage('user', question);
     input.value = '';
 
-    // 延迟回答，模拟思考
-    setTimeout(() => {
-        const answer = generateAnswer(question);
-        addQAMessage('assistant', answer);
-    }, 500);
+    // 如果配置了 AI，使用 AI 回答
+    if (aiConfig.apiKey && aiConfig.endpoint) {
+        // 显示加载状态
+        const loadingId = Date.now();
+        addQAMessage('assistant', '思考中...', loadingId);
+
+        try {
+            const schedulesSummary = schedules.map(s => {
+                const date = new Date(s.datetime);
+                return `- ${formatDate(date)} ${formatTime(date)}: ${s.title || s.content}`;
+            }).join('\n');
+
+            const recordsSummary = records.slice(0, 20).map(r => {
+                const time = new Date(r.timestamp);
+                return `- [${time.getMonth()+1}/${time.getDate()}] ${r.content}`;
+            }).join('\n');
+
+            const prompt = `你是一个日程管理助手。以下是用户的记录和日程数据：
+
+【记录列表】
+${recordsSummary || '暂无记录'}
+
+【日程列表】
+${schedulesSummary || '暂无日程'}
+
+用户的问题：${question}
+
+请根据以上数据回答用户的问题。如果没有相关数据，给出友好的提示。回答要简洁明了。`;
+
+            const answer = await callAI(prompt);
+            // 替换加载消息
+            const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
+            if (loadingEl) {
+                loadingEl.querySelector('.qa-bubble').textContent = answer;
+            }
+        } catch (error) {
+            console.error('AI 回答失败:', error);
+            const loadingEl = document.querySelector(`[data-msg-id="${loadingId}"]`);
+            if (loadingEl) {
+                loadingEl.querySelector('.qa-bubble').textContent = generateAnswer(question) + '\n\n(AI 回答失败，已使用本地回答)';
+            }
+        }
+    } else {
+        // 本地回答
+        setTimeout(() => {
+            const answer = generateAnswer(question);
+            addQAMessage('assistant', answer);
+        }, 300);
+    }
 }
 
 // 生成回答
@@ -459,10 +614,13 @@ function generateAnswer(question) {
 }
 
 // 添加问答消息
-function addQAMessage(role, content) {
+function addQAMessage(role, content, msgId = null) {
     const history = document.getElementById('qa-history');
     const messageDiv = document.createElement('div');
     messageDiv.className = `qa-message ${role}`;
+    if (msgId) {
+        messageDiv.setAttribute('data-msg-id', msgId);
+    }
 
     const bubble = document.createElement('div');
     bubble.className = 'qa-bubble';
@@ -473,6 +631,29 @@ function addQAMessage(role, content) {
 
     // 滚动到底部
     history.scrollTop = history.scrollHeight;
+}
+
+// 设置页面初始化
+function initSettingsTab() {
+    const saveBtn = document.getElementById('save-settings-btn');
+    const endpointInput = document.getElementById('api-endpoint');
+    const apiKeyInput = document.getElementById('api-key');
+    const modelInput = document.getElementById('model-name');
+
+    // 加载已保存的配置
+    if (aiConfig.endpoint) endpointInput.value = aiConfig.endpoint;
+    if (aiConfig.apiKey) apiKeyInput.value = aiConfig.apiKey;
+    if (aiConfig.model) modelInput.value = aiConfig.model;
+
+    saveBtn.addEventListener('click', () => {
+        aiConfig = {
+            endpoint: endpointInput.value.trim(),
+            apiKey: apiKeyInput.value.trim(),
+            model: modelInput.value.trim() || 'gpt-3.5-turbo'
+        };
+        localStorage.setItem('aiConfig', JSON.stringify(aiConfig));
+        alert('设置已保存');
+    });
 }
 
 // 工具函数
