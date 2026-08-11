@@ -144,28 +144,59 @@ async function parseSchedulesWithAI(text, recordId) {
 
 // 调用 AI API
 async function callAI(prompt) {
-    const response = await fetch(aiConfig.endpoint, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${aiConfig.apiKey}`
-        },
-        body: JSON.stringify({
-            model: aiConfig.model || 'gpt-3.5-turbo',
-            messages: [
-                { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
-                { role: 'user', content: prompt }
-            ],
-            temperature: 0.3
-        })
-    });
+    try {
+        // 检查是否使用代理模式
+        const useProxy = aiConfig.useProxy === 'true';
+        let url, requestBody;
 
-    if (!response.ok) {
-        throw new Error(`API 请求失败: ${response.status}`);
+        if (useProxy) {
+            // 使用后端代理
+            url = '/api/ai';
+            requestBody = {
+                endpoint: aiConfig.endpoint,
+                apiKey: aiConfig.apiKey,
+                model: aiConfig.model || 'gpt-3.5-turbo',
+                messages: [
+                    { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
+                    { role: 'user', content: prompt }
+                ]
+            };
+        } else {
+            // 直接调用 API
+            url = aiConfig.endpoint;
+            requestBody = {
+                model: aiConfig.model || 'gpt-3.5-turbo',
+                messages: [
+                    { role: 'system', content: '你是一个智能助手，帮助用户解析和整理日程安排。' },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.3
+            };
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(useProxy ? {} : { 'Authorization': `Bearer ${aiConfig.apiKey}` })
+            },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content;
+    } catch (error) {
+        // 如果是 CORS 错误，提供更详细的提示
+        if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+            throw new Error('网络请求失败，可能是 CORS 跨域限制。请在设置中启用"使用代理模式"，并部署后端代理服务器。');
+        }
+        throw error;
     }
-
-    const data = await response.json();
-    return data.choices[0].message.content;
 }
 
 // 解析日程 - 增强版
@@ -636,23 +667,52 @@ function addQAMessage(role, content, msgId = null) {
 // 设置页面初始化
 function initSettingsTab() {
     const saveBtn = document.getElementById('save-settings-btn');
+    const testBtn = document.getElementById('test-ai-btn');
     const endpointInput = document.getElementById('api-endpoint');
     const apiKeyInput = document.getElementById('api-key');
     const modelInput = document.getElementById('model-name');
+    const useProxyInput = document.getElementById('use-proxy');
 
     // 加载已保存的配置
     if (aiConfig.endpoint) endpointInput.value = aiConfig.endpoint;
     if (aiConfig.apiKey) apiKeyInput.value = aiConfig.apiKey;
     if (aiConfig.model) modelInput.value = aiConfig.model;
+    if (aiConfig.useProxy === 'true') useProxyInput.checked = true;
 
     saveBtn.addEventListener('click', () => {
         aiConfig = {
             endpoint: endpointInput.value.trim(),
             apiKey: apiKeyInput.value.trim(),
-            model: modelInput.value.trim() || 'gpt-3.5-turbo'
+            model: modelInput.value.trim() || 'gpt-3.5-turbo',
+            useProxy: useProxyInput.checked ? 'true' : 'false'
         };
         localStorage.setItem('aiConfig', JSON.stringify(aiConfig));
         alert('设置已保存');
+    });
+
+    // 测试 AI 连接
+    testBtn.addEventListener('click', async () => {
+        const endpoint = endpointInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        const model = modelInput.value.trim() || 'gpt-3.5-turbo';
+
+        if (!endpoint || !apiKey) {
+            alert('请先填写 API 端点和 API Key');
+            return;
+        }
+
+        testBtn.textContent = '测试中...';
+        testBtn.disabled = true;
+
+        try {
+            const response = await callAI('请回复"连接成功"');
+            alert(`AI 连接成功！\n\n回复：${response}`);
+        } catch (error) {
+            alert(`AI 连接失败：\n\n${error.message}\n\n建议：\n1. 检查 API 端点和 Key 是否正确\n2. 如果是 CORS 错误，请勾选"使用代理模式"并部署后端代理服务器`);
+        } finally {
+            testBtn.textContent = '测试 AI 连接';
+            testBtn.disabled = false;
+        }
     });
 }
 

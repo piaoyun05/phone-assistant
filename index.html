@@ -76,9 +76,19 @@
                         <label>模型名称</label>
                         <input type="text" id="model-name" placeholder="gpt-3.5-turbo">
                     </div>
+                    <div class="setting-item">
+                        <label style="display:flex;align-items:center;gap:8px;">
+                            <input type="checkbox" id="use-proxy" style="width:auto;">
+                            使用代理模式（解决 CORS 跨域问题）
+                        </label>
+                    </div>
                     <button id="save-settings-btn" class="primary-btn">保存设置</button>
+                    <button id="test-ai-btn" class="primary-btn" style="margin-top:10px;background:#28a745;">测试 AI 连接</button>
                     <div class="setting-tip">
-                        <p>支持 OpenAI、DeepSeek、智谱等兼容 OpenAI API 的大模型</p>
+                        <p><strong>使用方法：</strong></p>
+                        <p>1. 直接调用：部分 API（如某些国内模型）支持浏览器直接调用，无需代理</p>
+                        <p>2. 代理模式：如果直接调用失败（CORS 错误），需要部署后端代理服务器（server.js），然后勾选"使用代理模式"</p>
+                        <p>3. 支持 OpenAI、DeepSeek、智谱等兼容 OpenAI API 的大模型</p>
                     </div>
                 </div>
             </div>
