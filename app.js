@@ -227,15 +227,25 @@ function initRecordTab() {
 
 // 使用 AI 解析单条记录的日程
 async function parseSchedulesWithAI(text, recordId) {
-    const prompt = `请分析以下文本，提取其中的日程安排信息。返回 JSON 数组，每个元素包含：
-- title: 事项标题（简短描述）
-- datetime: ISO 格式日期时间（如 2026-01-15T15:00:00.000Z）
+    const prompt = `你是一个日程解析助手。请从以下文本中提取所有日程安排，返回 JSON 数组。
 
-如果没有日程信息，返回空数组 []。
+每个日程对象必须包含：
+- title: 事项标题（简短，如"开会"、"面试"）
+- datetime: ISO 8601 格式日期时间（如 "2026-01-15T15:00:00"）
+
+规则：
+1. 每个独立的时间点创建一个日程对象
+2. 如果文本中有多个时间，拆分成多个对象
+3. 日期使用当前年份（2026 年）
+4. 没有日程信息时返回空数组 []
+
+示例：
+输入："明天下午 3 点开会，下周一上午 10 点面试"
+输出：[{"title":"开会","datetime":"2026-01-16T15:00:00"},{"title":"面试","datetime":"2026-01-20T10:00:00"}]
 
 文本：${text}
 
-只返回 JSON，不要其他说明。`;
+只返回 JSON 数组，不要其他说明。`;
 
     try {
         const response = await callAI(prompt);
