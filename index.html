@@ -7,16 +7,22 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>手机记录助手</title>
-    <link rel="stylesheet" href="styles.css?v=20260115">
+    <link rel="stylesheet" href="styles.css?v=20260812">
 </head>
 <body>
     <div class="app-container">
         <header class="app-header">
-            <h1>📝 记录助手</h1>
+            <h1 data-i18n="appTitle"> 记录助手</h1>
+            <div class="header-tools">
+                <button id="theme-toggle" class="tool-btn" title="切换主题">🌙</button>
+                <button id="lang-toggle" class="tool-btn" title="切换语言">EN</button>
+            </div>
             <div class="tab-buttons">
-                <button class="tab-btn active" data-tab="record">记录</button>
-                <button class="tab-btn" data-tab="schedule">日程</button>
-                <button class="tab-btn" data-tab="qa">问答</button>
+                <button class="tab-btn active" data-tab="record" data-i18n="tabRecord">记录</button>
+                <button class="tab-btn" data-tab="schedule" data-i18n="tabSchedule">日程</button>
+                <button class="tab-btn" data-tab="qa" data-i18n="tabQA">问答</button>
+                <button class="tab-btn" data-tab="stats" data-i18n="tabStats">统计</button>
+                <button class="tab-btn" data-tab="settings" data-i18n="tabSettings">设置</button>
             </div>
         </header>
 
@@ -24,22 +30,22 @@
             <!-- 记录页面 -->
             <div id="record-tab" class="tab-content active">
                 <div class="input-section">
-                    <textarea id="record-input" placeholder="输入你要记录的内容...&#10;例如：明天下午 3 点开会&#10;下周一上午 10 点面试"></textarea>
+                    <textarea id="record-input" data-i18n-placeholder="recordPlaceholder" placeholder="输入你要记录的内容...&#10;例如：明天下午 3 点开会&#10;下周一上午 10 点面试"></textarea>
                     
                     <!-- 拍照识别 -->
                     <div class="camera-section">
                         <label for="camera-input" class="camera-btn">
-                            <span>📷 拍照识别文字</span>
+                            <span data-i18n="cameraBtn"> 拍照识别文字</span>
                         </label>
                         <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
                         <div id="camera-preview" class="camera-preview"></div>
                         <div id="ocr-status" class="ocr-status"></div>
                     </div>
                     
-                    <button id="save-btn" class="primary-btn">保存记录</button>
+                    <button id="save-btn" class="primary-btn" data-i18n="saveBtn">保存记录</button>
                 </div>
                 <div class="records-list">
-                    <h3>最近记录</h3>
+                    <h3 data-i18n="recentRecords">最近记录</h3>
                     <div id="records-container"></div>
                 </div>
             </div>
@@ -47,17 +53,17 @@
             <!-- 日程页面 -->
             <div id="schedule-tab" class="tab-content">
                 <div class="schedule-header">
-                    <h3>我的日程</h3>
+                    <h3 data-i18n="mySchedules">我的日程</h3>
                     <div>
                         <button id="sync-schedule-btn" class="icon-btn" title="从记录同步">🔗</button>
                         <button id="refresh-schedule-btn" class="icon-btn" title="刷新">🔄</button>
                     </div>
                 </div>
                 <div class="schedule-filters">
-                    <button class="filter-btn active" data-filter="all">全部</button>
-                    <button class="filter-btn" data-filter="today">今天</button>
-                    <button class="filter-btn" data-filter="week">本周</button>
-                    <button class="filter-btn" data-filter="upcoming">未来</button>
+                    <button class="filter-btn active" data-filter="all" data-i18n="filterAll">全部</button>
+                    <button class="filter-btn" data-filter="today" data-i18n="filterToday">今天</button>
+                    <button class="filter-btn" data-filter="week" data-i18n="filterWeek">本周</button>
+                    <button class="filter-btn" data-filter="upcoming" data-i18n="filterUpcoming">未来</button>
                 </div>
                 <div id="schedule-container"></div>
             </div>
@@ -67,14 +73,91 @@
                 <div class="qa-section">
                     <div id="qa-history"></div>
                     <div class="qa-input-section">
-                        <input type="text" id="qa-input" placeholder="提问关于你的日程...&#10;例如：明天有什么安排？">
-                        <button id="ask-btn" class="primary-btn">提问</button>
+                        <input type="text" id="qa-input" data-i18n-placeholder="qaPlaceholder" placeholder="提问关于你的日程...&#10;例如：明天有什么安排？">
+                        <button id="ask-btn" class="primary-btn" data-i18n="askBtn">提问</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计页面 -->
+            <div id="stats-tab" class="tab-content">
+                <div class="stats-section">
+                    <h3 data-i18n="statsOverview">数据概览</h3>
+                    <div class="stats-cards">
+                        <div class="stats-card">
+                            <div class="stats-number" id="stat-records">0</div>
+                            <div class="stats-label" data-i18n="statRecords">总记录数</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number" id="stat-schedules">0</div>
+                            <div class="stats-label" data-i18n="statSchedules">总日程数</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number" id="stat-today">0</div>
+                            <div class="stats-label" data-i18n="statToday">今日日程</div>
+                        </div>
+                        <div class="stats-card">
+                            <div class="stats-number" id="stat-week">0</div>
+                            <div class="stats-label" data-i18n="statWeek">本周日程</div>
+                        </div>
+                    </div>
+
+                    <h3 data-i18n="weeklyChart">本周记录趋势</h3>
+                    <div class="chart-container">
+                        <canvas id="weekly-chart" width="400" height="200"></canvas>
+                    </div>
+
+                    <h3 data-i18n="scheduleDistribution">日程时间分布</h3>
+                    <div class="chart-container">
+                        <canvas id="hour-chart" width="400" height="200"></canvas>
+                    </div>
+
+                    <h3 data-i18n="monthlyTrend">月度趋势</h3>
+                    <div class="chart-container">
+                        <canvas id="monthly-chart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置页面 -->
+            <div id="settings-tab" class="tab-content">
+                <div class="settings-section">
+                    <h3 data-i18n="dataManagement">数据管理</h3>
+                    <div class="settings-group">
+                        <button id="export-btn" class="settings-btn" data-i18n="exportData">📤 导出数据</button>
+                        <button id="import-btn" class="settings-btn" data-i18n="importData">📥 导入数据</button>
+                        <input type="file" id="import-input" accept=".json" style="display: none;">
+                        <button id="clear-btn" class="settings-btn danger" data-i18n="clearData">🗑️ 清除所有数据</button>
+                    </div>
+
+                    <h3 data-i18n="languageSettings">语言设置</h3>
+                    <div class="settings-group">
+                        <div class="lang-options">
+                            <button class="lang-btn active" data-lang="zh">🇨🇳 中文</button>
+                            <button class="lang-btn" data-lang="en">🇺🇸 English</button>
+                        </div>
+                        <button id="translate-btn" class="settings-btn" data-i18n="translateRecords"> AI 翻译所有记录</button>
+                        <div id="translate-status" class="translate-status"></div>
+                    </div>
+
+                    <h3 data-i18n="themeSettings">主题设置</h3>
+                    <div class="settings-group">
+                        <div class="theme-options">
+                            <button class="theme-btn active" data-theme="light" data-i18n="themeLight">☀️ 浅色模式</button>
+                            <button class="theme-btn" data-theme="dark" data-i18n="themeDark"> 深色模式</button>
+                        </div>
+                    </div>
+
+                    <h3 data-i18n="aboutApp">关于</h3>
+                    <div class="settings-group about-info">
+                        <p data-i18n="aboutText">手机智能记录助手 V1.0</p>
+                        <p data-i18n="aboutDesc">基于 AI 的个人日程管理工具，支持拍照识别、智能问答、数据统计等功能。</p>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=20260812"></script>
 </body>
 </html>
