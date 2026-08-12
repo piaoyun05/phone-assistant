@@ -2,11 +2,11 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// AI 配置（DeepSeek API）
+// AI 配置（DeepSeek Token Plan 免费方案）
 const aiConfig = {
     endpoint: 'https://api.deepseek.com/v1/chat/completions',
     apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
-    model: 'deepseek-chat'
+    model: 'deepseek-v4-flash'
 };
 
 // 状态标记
