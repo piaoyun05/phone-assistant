@@ -13,8 +13,7 @@ const aiConfig = {
 let hasAISynced = false;
 let isAsking = false; // 防止问答并发
 let editingRecordId = null; // 当前正在编辑的记录 ID
-let currentCategoryFilter = 'all'; // 当前分类筛选
-let uploadedImages = []; // 当前上传的图片（base64）
+let isProcessingOCR = false; // 防止 OCR 并发
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -174,46 +173,66 @@ function initTabs() {
 function initRecordTab() {
     const saveBtn = document.getElementById('save-btn');
     const recordInput = document.getElementById('record-input');
-    const imageInput = document.getElementById('image-input');
-    const imagePreview = document.getElementById('image-preview');
-    const categoryFilters = document.querySelectorAll('.record-filters .filter-btn');
+    const cameraInput = document.getElementById('camera-input');
+    const cameraPreview = document.getElementById('camera-preview');
+    const ocrStatus = document.getElementById('ocr-status');
 
-    // 图片上传处理
-    imageInput.addEventListener('change', (e) => {
-        const files = Array.from(e.target.files);
-        files.forEach(file => {
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    uploadedImages.push(event.target.result);
-                    renderImagePreview();
-                };
-                reader.readAsDataURL(file);
+    // 拍照识别文字
+    cameraInput.addEventListener('change', async (e) => {
+        if (isProcessingOCR) return;
+        const file = e.target.files[0];
+        if (!file || !file.type.startsWith('image/')) return;
+
+        isProcessingOCR = true;
+        ocrStatus.className = 'ocr-status processing';
+        ocrStatus.textContent = '正在识别文字...';
+
+        // 显示预览
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            cameraPreview.innerHTML = `<img src="${event.target.result}" alt="预览">`;
+        };
+        reader.readAsDataURL(file);
+
+        try {
+            // 压缩图片
+            const compressedBase64 = await compressImage(file, 1280);
+            const ocrText = await recognizeText(compressedBase64);
+
+            if (ocrText.trim()) {
+                // 将识别的文字追加到输入框
+                const currentText = recordInput.value.trim();
+                recordInput.value = currentText
+                    ? currentText + '\n' + ocrText.trim()
+                    : ocrText.trim();
+                ocrStatus.className = 'ocr-status success';
+                ocrStatus.textContent = `识别成功，已添加到输入框`;
+            } else {
+                ocrStatus.className = 'ocr-status error';
+                ocrStatus.textContent = '未识别到文字，请重试';
             }
-        });
-        // 清空 input 以便可以重复选择相同文件
-        imageInput.value = '';
-    });
-
-    // 分类筛选
-    categoryFilters.forEach(btn => {
-        btn.addEventListener('click', () => {
-            categoryFilters.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentCategoryFilter = btn.dataset.category;
-            renderRecords();
-        });
+        } catch (error) {
+            console.error('OCR 识别失败:', error);
+            ocrStatus.className = 'ocr-status error';
+            ocrStatus.textContent = '识别失败，请重试';
+        } finally {
+            isProcessingOCR = false;
+            cameraInput.value = '';
+            // 3 秒后清除预览和状态
+            setTimeout(() => {
+                cameraPreview.innerHTML = '';
+                ocrStatus.textContent = '';
+                ocrStatus.className = 'ocr-status';
+            }, 3000);
+        }
     });
 
     saveBtn.addEventListener('click', async () => {
         const content = recordInput.value.trim();
-        if (!content && uploadedImages.length === 0) {
-            alert('请输入内容或添加图片');
+        if (!content) {
+            alert('请输入内容');
             return;
         }
-
-        // 获取选中的分类
-        const category = document.querySelector('input[name="category"]:checked').value;
 
         // 禁用按钮防止重复点击
         saveBtn.disabled = true;
@@ -225,8 +244,6 @@ function initRecordTab() {
             const record = records.find(r => r.id === editingRecordId);
             if (record) {
                 record.content = content;
-                record.category = category;
-                record.images = [...uploadedImages];
                 record.timestamp = new Date().toISOString();
                 localStorage.setItem('records', JSON.stringify(records));
                 result = await parseSchedulesWithAI(content, editingRecordId);
@@ -237,8 +254,6 @@ function initRecordTab() {
             const record = {
                 id: Date.now(),
                 content: content,
-                category: category,
-                images: [...uploadedImages],
                 timestamp: new Date().toISOString()
             };
             records.unshift(record);
@@ -247,8 +262,6 @@ function initRecordTab() {
         }
 
         recordInput.value = '';
-        uploadedImages = [];
-        imagePreview.innerHTML = '';
         renderRecords();
         renderSchedules();
 
@@ -266,21 +279,90 @@ function initRecordTab() {
     });
 }
 
-// 渲染图片预览
-function renderImagePreview() {
-    const imagePreview = document.getElementById('image-preview');
-    imagePreview.innerHTML = uploadedImages.map((img, index) => `
-        <div class="preview-image-wrapper">
-            <img src="${img}" alt="预览">
-            <button class="remove-image-btn" onclick="removeImage(${index})">×</button>
-        </div>
-    `).join('');
+// 压缩图片（返回 base64）
+function compressImage(file, maxSize) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxSize || height > maxSize) {
+                    if (width > height) {
+                        height = Math.round(height * maxSize / width);
+                        width = maxSize;
+                    } else {
+                        width = Math.round(width * maxSize / height);
+                        height = maxSize;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.8));
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
 }
 
-// 删除图片
-function removeImage(index) {
-    uploadedImages.splice(index, 1);
-    renderImagePreview();
+// 使用 AI 识别图片中的文字
+async function recognizeText(imageBase64) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+        const response = await fetch(aiConfig.endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${aiConfig.apiKey}`
+            },
+            body: JSON.stringify({
+                model: 'deepseek-chat',
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'text',
+                                text: '请识别图片中的所有文字内容，直接返回识别的文字，不要添加任何说明。如果没有文字，返回空字符串。'
+                            },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: imageBase64
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens: 1000
+            }),
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OCR 请求失败 (${response.status}): ${errorText}`);
+        }
+
+        const data = await response.json();
+        return data.choices[0].message.content.trim();
+    } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+            throw new Error('OCR 请求超时');
+        }
+        throw error;
+    }
 }
 
 // 使用 AI 解析单条记录的日程
@@ -437,13 +519,7 @@ function parseSchedules(text) {
 function renderRecords() {
     const container = document.getElementById('records-container');
 
-    // 根据分类筛选
-    let filteredRecords = records;
-    if (currentCategoryFilter !== 'all') {
-        filteredRecords = records.filter(r => r.category === currentCategoryFilter);
-    }
-
-    if (filteredRecords.length === 0) {
+    if (records.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p>还没有记录</p></div>';
         return;
     }
@@ -451,24 +527,14 @@ function renderRecords() {
     // 预构建日程 recordId 集合，避免 O(n*m) 查找
     const scheduleRecordIds = new Set(schedules.map(s => s.recordId));
 
-    container.innerHTML = filteredRecords.slice(0, 20).map(record => {
+    container.innerHTML = records.slice(0, 20).map(record => {
         const time = new Date(record.timestamp);
         const timeStr = `${time.getMonth() + 1}/${time.getDate()} ${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
         const scheduleIcon = scheduleRecordIds.has(record.id) ? ' 📅' : '';
         const isEditing = record.id === editingRecordId;
-        const category = record.category || '其他';
-
-        // 生成图片 HTML
-        const imagesHtml = (record.images || []).map(img => 
-            `<img src="${img}" class="record-image" onclick="viewImage('${img}')">`
-        ).join('');
 
         return `<div class="record-item${isEditing ? ' editing' : ''}">
-            <div class="record-content">
-                <span class="category-tag ${category}">${category}</span>
-                <div class="record-text">${escapeHtml(record.content)}${scheduleIcon}</div>
-                ${imagesHtml ? `<div class="record-images">${imagesHtml}</div>` : ''}
-            </div>
+            <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
             <div class="record-meta">
                 <div class="record-time">${timeStr}</div>
                 <div class="record-actions">
@@ -480,22 +546,6 @@ function renderRecords() {
     }).join('');
 }
 
-// 查看大图
-function viewImage(src) {
-    const modal = document.createElement('div');
-    modal.className = 'image-modal';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <img src="${src}" alt="大图">
-            <button class="close-modal" onclick="this.parentElement.parentElement.remove()">×</button>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    modal.onclick = (e) => {
-        if (e.target === modal) modal.remove();
-    };
-}
-
 // 编辑记录
 function editRecord(id) {
     const record = records.find(r => r.id === id);
@@ -503,15 +553,6 @@ function editRecord(id) {
 
     editingRecordId = id;
     document.getElementById('record-input').value = record.content;
-    
-    // 设置分类
-    const categoryRadio = document.querySelector(`input[name="category"][value="${record.category || '其他'}"]`);
-    if (categoryRadio) categoryRadio.checked = true;
-    
-    // 加载图片
-    uploadedImages = [...(record.images || [])];
-    renderImagePreview();
-    
     document.getElementById('record-input').focus();
     document.getElementById('save-btn').textContent = '更新记录';
 
