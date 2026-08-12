@@ -2,9 +2,10 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// AI 配置（使用后端代理，API Key 隐藏在服务端）
+// AI 配置（DeepSeek API）
 const aiConfig = {
-    endpoint: '/api/ai',
+    endpoint: 'https://api.deepseek.com/v1/chat/completions',
+    apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
     model: 'deepseek-chat'
 };
 
@@ -30,7 +31,7 @@ function parseAIJSON(text) {
     return JSON.parse(cleaned);
 }
 
-// 调用 AI API（通过后端代理，API Key 隐藏在服务端）
+// 调用 AI API（直接调用 DeepSeek）
 async function callAI(prompt, timeoutMs = 15000) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -39,11 +40,19 @@ async function callAI(prompt, timeoutMs = 15000) {
         const response = await fetch(aiConfig.endpoint, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${aiConfig.apiKey}`
             },
             body: JSON.stringify({
-                prompt: prompt,
-                model: aiConfig.model
+                model: aiConfig.model,
+                messages: [
+                    { 
+                        role: 'system', 
+                        content: '你是一个智能助手，帮助用户解析和整理日程安排。只返回JSON，不要其他说明。' 
+                    },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.3
             }),
             signal: controller.signal
         });
@@ -51,12 +60,12 @@ async function callAI(prompt, timeoutMs = 15000) {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `API 请求失败 (${response.status})`);
+            const errorText = await response.text();
+            throw new Error(`API 请求失败 (${response.status}): ${errorText}`);
         }
 
         const data = await response.json();
-        return data.content;
+        return data.choices[0].message.content;
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
