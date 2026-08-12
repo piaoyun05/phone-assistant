@@ -13,6 +13,8 @@ const aiConfig = {
 let hasAISynced = false;
 let isAsking = false; // 防止问答并发
 let editingRecordId = null; // 当前正在编辑的记录 ID
+let currentCategoryFilter = 'all'; // 当前分类筛选
+let uploadedImages = []; // 当前上传的图片（base64）
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -172,13 +174,46 @@ function initTabs() {
 function initRecordTab() {
     const saveBtn = document.getElementById('save-btn');
     const recordInput = document.getElementById('record-input');
+    const imageInput = document.getElementById('image-input');
+    const imagePreview = document.getElementById('image-preview');
+    const categoryFilters = document.querySelectorAll('.record-filters .filter-btn');
+
+    // 图片上传处理
+    imageInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        files.forEach(file => {
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    uploadedImages.push(event.target.result);
+                    renderImagePreview();
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        // 清空 input 以便可以重复选择相同文件
+        imageInput.value = '';
+    });
+
+    // 分类筛选
+    categoryFilters.forEach(btn => {
+        btn.addEventListener('click', () => {
+            categoryFilters.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentCategoryFilter = btn.dataset.category;
+            renderRecords();
+        });
+    });
 
     saveBtn.addEventListener('click', async () => {
         const content = recordInput.value.trim();
-        if (!content) {
-            alert('请输入内容');
+        if (!content && uploadedImages.length === 0) {
+            alert('请输入内容或添加图片');
             return;
         }
+
+        // 获取选中的分类
+        const category = document.querySelector('input[name="category"]:checked').value;
 
         // 禁用按钮防止重复点击
         saveBtn.disabled = true;
@@ -190,6 +225,8 @@ function initRecordTab() {
             const record = records.find(r => r.id === editingRecordId);
             if (record) {
                 record.content = content;
+                record.category = category;
+                record.images = [...uploadedImages];
                 record.timestamp = new Date().toISOString();
                 localStorage.setItem('records', JSON.stringify(records));
                 result = await parseSchedulesWithAI(content, editingRecordId);
@@ -200,6 +237,8 @@ function initRecordTab() {
             const record = {
                 id: Date.now(),
                 content: content,
+                category: category,
+                images: [...uploadedImages],
                 timestamp: new Date().toISOString()
             };
             records.unshift(record);
@@ -208,6 +247,8 @@ function initRecordTab() {
         }
 
         recordInput.value = '';
+        uploadedImages = [];
+        imagePreview.innerHTML = '';
         renderRecords();
         renderSchedules();
 
@@ -223,6 +264,23 @@ function initRecordTab() {
             }
         }
     });
+}
+
+// 渲染图片预览
+function renderImagePreview() {
+    const imagePreview = document.getElementById('image-preview');
+    imagePreview.innerHTML = uploadedImages.map((img, index) => `
+        <div class="preview-image-wrapper">
+            <img src="${img}" alt="预览">
+            <button class="remove-image-btn" onclick="removeImage(${index})">×</button>
+        </div>
+    `).join('');
+}
+
+// 删除图片
+function removeImage(index) {
+    uploadedImages.splice(index, 1);
+    renderImagePreview();
 }
 
 // 使用 AI 解析单条记录的日程
@@ -379,7 +437,13 @@ function parseSchedules(text) {
 function renderRecords() {
     const container = document.getElementById('records-container');
 
-    if (records.length === 0) {
+    // 根据分类筛选
+    let filteredRecords = records;
+    if (currentCategoryFilter !== 'all') {
+        filteredRecords = records.filter(r => r.category === currentCategoryFilter);
+    }
+
+    if (filteredRecords.length === 0) {
         container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><p>还没有记录</p></div>';
         return;
     }
@@ -387,14 +451,24 @@ function renderRecords() {
     // 预构建日程 recordId 集合，避免 O(n*m) 查找
     const scheduleRecordIds = new Set(schedules.map(s => s.recordId));
 
-    container.innerHTML = records.slice(0, 20).map(record => {
+    container.innerHTML = filteredRecords.slice(0, 20).map(record => {
         const time = new Date(record.timestamp);
         const timeStr = `${time.getMonth() + 1}/${time.getDate()} ${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
         const scheduleIcon = scheduleRecordIds.has(record.id) ? ' 📅' : '';
         const isEditing = record.id === editingRecordId;
+        const category = record.category || '其他';
+
+        // 生成图片 HTML
+        const imagesHtml = (record.images || []).map(img => 
+            `<img src="${img}" class="record-image" onclick="viewImage('${img}')">`
+        ).join('');
 
         return `<div class="record-item${isEditing ? ' editing' : ''}">
-            <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
+            <div class="record-content">
+                <span class="category-tag ${category}">${category}</span>
+                <div class="record-text">${escapeHtml(record.content)}${scheduleIcon}</div>
+                ${imagesHtml ? `<div class="record-images">${imagesHtml}</div>` : ''}
+            </div>
             <div class="record-meta">
                 <div class="record-time">${timeStr}</div>
                 <div class="record-actions">
@@ -406,6 +480,22 @@ function renderRecords() {
     }).join('');
 }
 
+// 查看大图
+function viewImage(src) {
+    const modal = document.createElement('div');
+    modal.className = 'image-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <img src="${src}" alt="大图">
+            <button class="close-modal" onclick="this.parentElement.parentElement.remove()">×</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.onclick = (e) => {
+        if (e.target === modal) modal.remove();
+    };
+}
+
 // 编辑记录
 function editRecord(id) {
     const record = records.find(r => r.id === id);
@@ -413,6 +503,15 @@ function editRecord(id) {
 
     editingRecordId = id;
     document.getElementById('record-input').value = record.content;
+    
+    // 设置分类
+    const categoryRadio = document.querySelector(`input[name="category"][value="${record.category || '其他'}"]`);
+    if (categoryRadio) categoryRadio.checked = true;
+    
+    // 加载图片
+    uploadedImages = [...(record.images || [])];
+    renderImagePreview();
+    
     document.getElementById('record-input').focus();
     document.getElementById('save-btn').textContent = '更新记录';
 

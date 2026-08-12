@@ -98,6 +98,132 @@ body {
     border-color: #667eea;
 }
 
+/* 分类选择 */
+.category-section {
+    margin-bottom: 12px;
+}
+
+.category-section label {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 8px;
+    display: block;
+}
+
+.category-options {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.category-label {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+}
+
+.category-label input[type="radio"] {
+    display: none;
+}
+
+.category-badge {
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.category-badge.work {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.category-badge.life {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.category-badge.study {
+    background: #e8f5e9;
+    color: #388e3c;
+}
+
+.category-badge.other {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.category-label input[type="radio"]:checked + .category-badge {
+    border-color: currentColor;
+    transform: scale(1.05);
+}
+
+/* 图片上传 */
+.image-upload-section {
+    margin-bottom: 12px;
+}
+
+.image-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: white;
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    transition: all 0.2s;
+}
+
+.image-upload-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.image-preview {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.image-preview img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+/* 记录筛选 */
+.record-filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+}
+
+.record-filters .filter-btn {
+    background: #f0f0f0;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s;
+}
+
+.record-filters .filter-btn.active {
+    background: #667eea;
+    color: white;
+}
+
 .primary-btn {
     width: 100%;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -163,6 +289,139 @@ body {
 .record-item.editing {
     border-left-color: #f39c12;
     background: #fffdf5;
+}
+
+/* 分类标签 */
+.category-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.category-tag.work {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.category-tag.life {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.category-tag.study {
+    background: #e8f5e9;
+    color: #388e3c;
+}
+
+.category-tag.other {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.record-text {
+    color: #333;
+    font-size: 15px;
+    line-height: 1.5;
+    word-break: break-word;
+}
+
+/* 记录图片 */
+.record-images {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.record-image {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid #e0e0e0;
+    transition: transform 0.2s;
+}
+
+.record-image:hover {
+    transform: scale(1.05);
+}
+
+/* 图片预览 */
+.preview-image-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.preview-image-wrapper img {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid #e0e0e0;
+}
+
+.remove-image-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 图片模态框 */
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    position: relative;
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.modal-content img {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 8px;
+}
+
+.close-modal {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    font-size: 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .edit-btn {
