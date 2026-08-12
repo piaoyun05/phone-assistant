@@ -7,11 +7,12 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// ===== AI 配置 =====
+// AI 配置（DeepSeek API）
 const aiConfig = {
     endpoint: 'https://api.deepseek.com/v1/chat/completions',
     apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
-    model: 'deepseek-chat'
+    model: 'deepseek-chat',
+    visionModel: 'deepseek-vl2'  // 视觉模型，用于 OCR 和图片识别
 };
 
 // ===== 状态标记 =====
@@ -499,7 +500,7 @@ async function recognizeText(imageBase64) {
                 'Authorization': `Bearer ${aiConfig.apiKey}`
             },
             body: JSON.stringify({
-                model: 'deepseek-chat',
+                model: aiConfig.visionModel,
                 messages: [{
                     role: 'user',
                     content: [
