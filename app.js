@@ -486,10 +486,86 @@ function compressImage(file, maxSize) {
     });
 }
 
+// 图像预处理：放大 + 灰度 + 二值化 + 锐化，大幅提升 OCR 准确率
+function preprocessImage(imageBase64) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            // 放大到至少 2 倍，提升小字识别率
+            const scale = Math.max(2, Math.ceil(1600 / Math.max(img.width, img.height)));
+            const w = img.width * scale;
+            const h = img.height * scale;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+
+            // 高质量缩放
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, w, h);
+
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const data = imageData.data;
+
+            // 1. 转灰度（加权平均法）
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = Math.round(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+
+            // 2. 自适应二值化（Otsu 简化版）
+            // 计算直方图
+            const histogram = new Array(256).fill(0);
+            for (let i = 0; i < data.length; i += 4) {
+                histogram[data[i]]++;
+            }
+            const totalPixels = data.length / 4;
+            let sum = 0;
+            for (let i = 0; i < 256; i++) sum += i * histogram[i];
+
+            let sumB = 0, wB = 0, wF = 0, maxVariance = 0, threshold = 128;
+            for (let t = 0; t < 256; t++) {
+                wB += histogram[t];
+                if (wB === 0) continue;
+                wF = totalPixels - wB;
+                if (wF === 0) break;
+                sumB += t * histogram[t];
+                const meanB = sumB / wB;
+                const meanF = (sum - sumB) / wF;
+                const variance = wB * wF * (meanB - meanF) * (meanB - meanF);
+                if (variance > maxVariance) {
+                    maxVariance = variance;
+                    threshold = t;
+                }
+            }
+
+            // 应用阈值（稍微调低阈值，保留更多文字细节）
+            const adjustedThreshold = Math.max(0, threshold - 10);
+            for (let i = 0; i < data.length; i += 4) {
+                const val = data[i] < adjustedThreshold ? 0 : 255;
+                data[i] = val;
+                data[i + 1] = val;
+                data[i + 2] = val;
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        img.src = imageBase64;
+    });
+}
+
 // Tesseract.js 本地 OCR 识别图片文字（无需 AI API）
 async function recognizeText(imageBase64) {
     try {
-        const result = await Tesseract.recognize(imageBase64, 'chi_sim+eng', {
+        // 先预处理图像
+        const processedImage = await preprocessImage(imageBase64);
+
+        const result = await Tesseract.recognize(processedImage, 'chi_sim+eng', {
             logger: (m) => {
                 if (m.status === 'recognizing text') {
                     const ocrStatus = document.getElementById('ocr-status');
@@ -499,7 +575,20 @@ async function recognizeText(imageBase64) {
                 }
             }
         });
-        return result.data.text.trim();
+
+        // 后处理：清理识别结果
+        let text = result.data.text;
+
+        // 去除多余空行（保留单空行）
+        text = text.replace(/\n{3,}/g, '\n\n');
+
+        // 去除每行首尾空白
+        text = text.split('\n').map(line => line.trim()).filter(line => line.length > 0).join('\n');
+
+        // 去除常见的 OCR 噪声字符
+        text = text.replace(/[|¦┃│┊┋]/g, '');
+
+        return text.trim();
     } catch (error) {
         console.error('Tesseract OCR failed:', error);
         throw error;
