@@ -1,11 +1,22 @@
 module.exports = async function handler(req, res) {
+  // 设置 CORS 头
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  // 处理 OPTIONS 预检请求
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   // 只允许 POST 请求
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { prompt, model = 'deepseek-chat' } = req.body;
+    // @vercel/node 会自动解析 JSON body
+    const { prompt, model = 'deepseek-chat' } = req.body || {};
 
     if (!prompt) {
       return res.status(400).json({ error: 'Missing prompt' });
@@ -15,8 +26,10 @@ module.exports = async function handler(req, res) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     
     if (!apiKey) {
-      return res.status(500).json({ error: 'API key not configured' });
+      return res.status(500).json({ error: 'API key not configured in environment variables' });
     }
+
+    console.log('Calling DeepSeek API with model:', model);
 
     // 调用 DeepSeek API
     const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -40,6 +53,7 @@ module.exports = async function handler(req, res) {
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('DeepSeek API error:', response.status, errorText);
       return res.status(response.status).json({ 
         error: 'DeepSeek API error', 
         details: errorText 
@@ -48,7 +62,6 @@ module.exports = async function handler(req, res) {
 
     const data = await response.json();
     
-    // 返回 AI 响应
     res.status(200).json({
       content: data.choices[0].message.content
     });
