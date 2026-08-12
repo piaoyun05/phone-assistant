@@ -12,6 +12,7 @@ const aiConfig = {
 // 状态标记
 let hasAISynced = false;
 let isAsking = false; // 防止问答并发
+let editingRecordId = null; // 当前正在编辑的记录 ID
 
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -183,19 +184,34 @@ function initRecordTab() {
         saveBtn.disabled = true;
         saveBtn.textContent = '保存中...';
 
-        const record = {
-            id: Date.now(),
-            content: content,
-            timestamp: new Date().toISOString()
-        };
-        records.unshift(record);
-        localStorage.setItem('records', JSON.stringify(records));
+        if (editingRecordId) {
+            // 编辑模式：更新现有记录
+            const record = records.find(r => r.id === editingRecordId);
+            if (record) {
+                record.content = content;
+                record.timestamp = new Date().toISOString();
+                // 删除该记录关联的旧日程，重新解析
+                schedules = schedules.filter(s => s.recordId !== editingRecordId);
+                localStorage.setItem('records', JSON.stringify(records));
+                localStorage.setItem('schedules', JSON.stringify(schedules));
+                await parseSchedulesWithAI(content, editingRecordId);
+            }
+            exitEditMode();
+        } else {
+            // 新建模式
+            const record = {
+                id: Date.now(),
+                content: content,
+                timestamp: new Date().toISOString()
+            };
+            records.unshift(record);
+            localStorage.setItem('records', JSON.stringify(records));
+            await parseSchedulesWithAI(content, record.id);
+        }
 
         recordInput.value = '';
         renderRecords();
-
-        // AI 解析日程
-        await parseSchedulesWithAI(content, record.id);
+        renderSchedules();
 
         // 恢复按钮
         saveBtn.disabled = false;
@@ -354,15 +370,41 @@ function renderRecords() {
         const time = new Date(record.timestamp);
         const timeStr = `${time.getMonth() + 1}/${time.getDate()} ${time.getHours()}:${String(time.getMinutes()).padStart(2, '0')}`;
         const scheduleIcon = scheduleRecordIds.has(record.id) ? ' 📅' : '';
+        const isEditing = record.id === editingRecordId;
 
-        return `<div class="record-item">
+        return `<div class="record-item${isEditing ? ' editing' : ''}">
             <div class="record-content">${escapeHtml(record.content)}${scheduleIcon}</div>
             <div class="record-meta">
                 <div class="record-time">${timeStr}</div>
-                <button class="delete-btn" onclick="deleteRecord(${record.id})">删除</button>
+                <div class="record-actions">
+                    <button class="edit-btn" onclick="editRecord(${record.id})">编辑</button>
+                    <button class="delete-btn" onclick="deleteRecord(${record.id})">删除</button>
+                </div>
             </div>
         </div>`;
     }).join('');
+}
+
+// 编辑记录
+function editRecord(id) {
+    const record = records.find(r => r.id === id);
+    if (!record) return;
+
+    editingRecordId = id;
+    document.getElementById('record-input').value = record.content;
+    document.getElementById('record-input').focus();
+    document.getElementById('save-btn').textContent = '更新记录';
+
+    renderRecords();
+
+    // 滚动到输入框
+    document.querySelector('.input-section').scrollIntoView({ behavior: 'smooth' });
+}
+
+// 退出编辑模式
+function exitEditMode() {
+    editingRecordId = null;
+    document.getElementById('save-btn').textContent = '保存记录';
 }
 
 // 删除记录
