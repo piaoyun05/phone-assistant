@@ -11,8 +11,7 @@ let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 const aiConfig = {
     endpoint: 'https://api.deepseek.com/v1/chat/completions',
     apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
-    model: 'deepseek-chat',
-    visionModel: 'deepseek-vl2'  // 视觉模型，用于 OCR 和图片识别
+    model: 'deepseek-chat'
 };
 
 // ===== 状态标记 =====
@@ -487,44 +486,22 @@ function compressImage(file, maxSize) {
     });
 }
 
-// AI 识别图片文字
+// Tesseract.js 本地 OCR 识别图片文字（无需 AI API）
 async function recognizeText(imageBase64) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000);
-
     try {
-        const response = await fetch(aiConfig.endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${aiConfig.apiKey}`
-            },
-            body: JSON.stringify({
-                model: aiConfig.visionModel,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        { type: 'text', text: '请识别图片中的所有文字内容，直接返回识别的文字，不要添加任何说明。如果没有文字，返回空字符串。' },
-                        { type: 'image_url', image_url: { url: imageBase64 } }
-                    ]
-                }],
-                max_tokens: 1000
-            }),
-            signal: controller.signal
+        const result = await Tesseract.recognize(imageBase64, 'chi_sim+eng', {
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    const ocrStatus = document.getElementById('ocr-status');
+                    if (ocrStatus) {
+                        ocrStatus.textContent = `识别中 ${Math.round(m.progress * 100)}%...`;
+                    }
+                }
+            }
         });
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`OCR request failed (${response.status}): ${errorText}`);
-        }
-
-        const data = await response.json();
-        return data.choices[0].message.content.trim();
+        return result.data.text.trim();
     } catch (error) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') throw new Error('OCR timeout');
+        console.error('Tesseract OCR failed:', error);
         throw error;
     }
 }
