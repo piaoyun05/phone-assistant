@@ -2,11 +2,11 @@
 let records = JSON.parse(localStorage.getItem('records') || '[]');
 let schedules = JSON.parse(localStorage.getItem('schedules') || '[]');
 
-// AI 配置（DeepSeek Token Plan 免费方案）
+// AI 配置（DeepSeek API）
 const aiConfig = {
     endpoint: 'https://api.deepseek.com/v1/chat/completions',
     apiKey: 'sk-e4951a174bf04067b398ac1efbc45e7a',
-    model: 'deepseek-v4-flash'
+    model: 'deepseek-chat'
 };
 
 // 状态标记
@@ -182,19 +182,17 @@ function initRecordTab() {
 
         // 禁用按钮防止重复点击
         saveBtn.disabled = true;
-        saveBtn.textContent = '保存中...';
+        saveBtn.textContent = 'AI 解析中...';
 
+        let result;
         if (editingRecordId) {
             // 编辑模式：更新现有记录
             const record = records.find(r => r.id === editingRecordId);
             if (record) {
                 record.content = content;
                 record.timestamp = new Date().toISOString();
-                // 删除该记录关联的旧日程，重新解析
-                schedules = schedules.filter(s => s.recordId !== editingRecordId);
                 localStorage.setItem('records', JSON.stringify(records));
-                localStorage.setItem('schedules', JSON.stringify(schedules));
-                await parseSchedulesWithAI(content, editingRecordId);
+                result = await parseSchedulesWithAI(content, editingRecordId);
             }
             exitEditMode();
         } else {
@@ -206,36 +204,48 @@ function initRecordTab() {
             };
             records.unshift(record);
             localStorage.setItem('records', JSON.stringify(records));
-            await parseSchedulesWithAI(content, record.id);
+            result = await parseSchedulesWithAI(content, record.id);
         }
 
         recordInput.value = '';
         renderRecords();
         renderSchedules();
 
-        // 恢复按钮
+        // 恢复按钮并显示结果
         saveBtn.disabled = false;
         saveBtn.textContent = '保存记录';
+        
+        if (result) {
+            if (result.count > 0) {
+                alert(`已保存，AI 识别到 ${result.count} 个日程`);
+            } else {
+                alert('记录已保存');
+            }
+        }
     });
 }
 
 // 使用 AI 解析单条记录的日程
 async function parseSchedulesWithAI(text, recordId) {
     const prompt = `请分析以下文本，提取其中的日程安排信息。返回 JSON 数组，每个元素包含：
-- title: 事项标题
-- datetime: ISO 格式日期时间
+- title: 事项标题（简短描述）
+- datetime: ISO 格式日期时间（如 2026-01-15T15:00:00.000Z）
 
-没有日程返回空数组 []。
+如果没有日程信息，返回空数组 []。
 
 文本：${text}
 
-只返回 JSON。`;
+只返回 JSON，不要其他说明。`;
 
     try {
         const response = await callAI(prompt);
         const schedulesData = parseAIJSON(response);
 
         if (Array.isArray(schedulesData) && schedulesData.length > 0) {
+            // 删除该记录的旧日程（如果有）
+            schedules = schedules.filter(s => s.recordId !== recordId);
+            
+            // 添加新日程
             schedulesData.forEach(s => {
                 if (s.datetime) {
                     schedules.push({
@@ -249,20 +259,21 @@ async function parseSchedulesWithAI(text, recordId) {
             });
             localStorage.setItem('schedules', JSON.stringify(schedules));
             hasAISynced = true;
-            alert(`已保存记录，AI 识别到 ${schedulesData.length} 个日程`);
+            return { success: true, count: schedulesData.length };
         } else {
-            alert('记录已保存');
+            return { success: true, count: 0 };
         }
     } catch (error) {
         console.error('AI 解析失败:', error);
         // 降级到本地解析
         const extractedSchedules = parseSchedules(text);
         if (extractedSchedules.length > 0) {
+            schedules = schedules.filter(s => s.recordId !== recordId);
             extractedSchedules.forEach(s => { s.recordId = recordId; });
             schedules.push(...extractedSchedules);
             localStorage.setItem('schedules', JSON.stringify(schedules));
         }
-        alert('记录已保存');
+        return { success: false, count: extractedSchedules.length };
     }
 }
 
