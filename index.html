@@ -6,14 +6,15 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>手机记录助手</title>
-    <link rel="stylesheet" href="styles.css?v=20260812">
+    <title>手机智能记录助手 V2.0</title>
+    <link rel="stylesheet" href="styles.css?v=20260813">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body>
     <div class="app-container">
+        <!-- 顶部导航栏 -->
         <header class="app-header">
-            <h1 data-i18n="appTitle"> 记录助手</h1>
+            <h1 data-i18n="appTitle">📱 智能记录助手</h1>
             <div class="header-tools">
                 <button id="theme-toggle" class="tool-btn" title="切换主题">🌙</button>
                 <button id="lang-toggle" class="tool-btn" title="切换语言">EN</button>
@@ -21,6 +22,7 @@
             <div class="tab-buttons">
                 <button class="tab-btn active" data-tab="record" data-i18n="tabRecord">记录</button>
                 <button class="tab-btn" data-tab="schedule" data-i18n="tabSchedule">日程</button>
+                <button class="tab-btn" data-tab="timeline" data-i18n="tabTimeline">时间线</button>
                 <button class="tab-btn" data-tab="qa" data-i18n="tabQA">问答</button>
                 <button class="tab-btn" data-tab="stats" data-i18n="tabStats">统计</button>
                 <button class="tab-btn" data-tab="settings" data-i18n="tabSettings">设置</button>
@@ -28,30 +30,54 @@
         </header>
 
         <main class="app-content">
-            <!-- 记录页面 -->
+            <!-- ===== 记录页面 ===== -->
             <div id="record-tab" class="tab-content active">
                 <div class="input-section">
                     <textarea id="record-input" data-i18n-placeholder="recordPlaceholder" placeholder="输入你要记录的内容...&#10;例如：明天下午 3 点开会&#10;下周一上午 10 点面试"></textarea>
-                    
+
                     <!-- 拍照识别 -->
                     <div class="camera-section">
                         <label for="camera-input" class="camera-btn">
-                            <span data-i18n="cameraBtn"> 拍照识别文字</span>
+                            <span data-i18n="cameraBtn">📷 拍照识别文字</span>
                         </label>
                         <input type="file" id="camera-input" accept="image/*" capture="environment" style="display: none;">
                         <div id="camera-preview" class="camera-preview"></div>
                         <div id="ocr-status" class="ocr-status"></div>
                     </div>
-                    
-                    <button id="save-btn" class="primary-btn" data-i18n="saveBtn">保存记录</button>
+
+                    <!-- AI 润色风格选择 -->
+                    <div class="style-selector">
+                        <label data-i18n="polishStyle">润色风格：</label>
+                        <select id="polish-style">
+                            <option value="original" data-i18n="styleOriginal">原汁原味（轻微优化）</option>
+                            <option value="formal" data-i18n="styleFormal">正式办公风</option>
+                            <option value="concise" data-i18n="styleConcise">简洁精炼风</option>
+                            <option value="detailed" data-i18n="styleDetailed">详细拓展风</option>
+                        </select>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="save-btn" class="primary-btn" data-i18n="saveBtn">保存记录</button>
+                        <button id="ai-correct-btn" class="secondary-btn" data-i18n="aiCorrectBtn">✨ AI 纠错整理</button>
+                    </div>
                 </div>
+
+                <!-- 标签筛选 -->
+                <div class="tag-filters">
+                    <button class="tag-filter-btn active" data-tag="all" data-i18n="tagAll">全部</button>
+                    <button class="tag-filter-btn" data-tag="work" data-i18n="tagWork">工作</button>
+                    <button class="tag-filter-btn" data-tag="life" data-i18n="tagLife">生活</button>
+                    <button class="tag-filter-btn" data-tag="study" data-i18n="tagStudy">学习</button>
+                    <button class="tag-filter-btn" data-tag="task" data-i18n="tagTask">待办</button>
+                </div>
+
                 <div class="records-list">
                     <h3 data-i18n="recentRecords">最近记录</h3>
                     <div id="records-container"></div>
                 </div>
             </div>
 
-            <!-- 日程页面 -->
+            <!-- ===== 日程页面 ===== -->
             <div id="schedule-tab" class="tab-content">
                 <div class="schedule-header">
                     <h3 data-i18n="mySchedules">我的日程</h3>
@@ -69,18 +95,36 @@
                 <div id="schedule-container"></div>
             </div>
 
-            <!-- 问答页面 -->
+            <!-- ===== 时间线页面 ===== -->
+            <div id="timeline-tab" class="tab-content">
+                <div class="timeline-header">
+                    <h3 data-i18n="timelineView">时间线视图</h3>
+                    <div class="timeline-controls">
+                        <button class="timeline-view-btn active" data-view="day" data-i18n="viewDay">日</button>
+                        <button class="timeline-view-btn" data-view="week" data-i18n="viewWeek">周</button>
+                        <button class="timeline-view-btn" data-view="month" data-i18n="viewMonth">月</button>
+                    </div>
+                </div>
+                <div class="timeline-nav">
+                    <button id="timeline-prev" class="nav-btn">◀</button>
+                    <span id="timeline-label" class="timeline-label"></span>
+                    <button id="timeline-next" class="nav-btn">▶</button>
+                </div>
+                <div id="timeline-container"></div>
+            </div>
+
+            <!-- ===== 问答页面 ===== -->
             <div id="qa-tab" class="tab-content">
                 <div class="qa-section">
                     <div id="qa-history"></div>
                     <div class="qa-input-section">
-                        <input type="text" id="qa-input" data-i18n-placeholder="qaPlaceholder" placeholder="提问关于你的日程...&#10;例如：明天有什么安排？">
+                        <input type="text" id="qa-input" data-i18n-placeholder="qaPlaceholder" placeholder="提问关于你的记录...&#10;例如：我上周的工作重点是什么？">
                         <button id="ask-btn" class="primary-btn" data-i18n="askBtn">提问</button>
                     </div>
                 </div>
             </div>
 
-            <!-- 统计页面 -->
+            <!-- ===== 统计页面 ===== -->
             <div id="stats-tab" class="tab-content">
                 <div class="stats-section">
                     <h3 data-i18n="statsOverview">数据概览</h3>
@@ -120,13 +164,13 @@
                 </div>
             </div>
 
-            <!-- 设置页面 -->
+            <!-- ===== 设置页面 ===== -->
             <div id="settings-tab" class="tab-content">
                 <div class="settings-section">
                     <h3 data-i18n="dataManagement">数据管理</h3>
                     <div class="settings-group">
                         <button id="export-btn" class="settings-btn" data-i18n="exportData">📤 导出数据</button>
-                        <button id="import-btn" class="settings-btn" data-i18n="importData">📥 导入数据</button>
+                        <button id="import-btn" class="settings-btn" data-i18n="importData"> 导入数据</button>
                         <input type="file" id="import-input" accept=".json" style="display: none;">
                         <button id="clear-btn" class="settings-btn danger" data-i18n="clearData">🗑️ 清除所有数据</button>
                     </div>
@@ -137,7 +181,7 @@
                             <button class="lang-btn active" data-lang="zh">🇨🇳 中文</button>
                             <button class="lang-btn" data-lang="en">🇺🇸 English</button>
                         </div>
-                        <button id="translate-btn" class="settings-btn" data-i18n="translateRecords"> AI 翻译所有记录</button>
+                        <button id="translate-btn" class="settings-btn" data-i18n="translateRecords">🌐 AI 翻译所有记录</button>
                         <div id="translate-status" class="translate-status"></div>
                     </div>
 
@@ -145,20 +189,64 @@
                     <div class="settings-group">
                         <div class="theme-options">
                             <button class="theme-btn active" data-theme="light" data-i18n="themeLight">☀️ 浅色模式</button>
-                            <button class="theme-btn" data-theme="dark" data-i18n="themeDark"> 深色模式</button>
+                            <button class="theme-btn" data-theme="dark" data-i18n="themeDark">🌙 深色模式</button>
                         </div>
                     </div>
 
                     <h3 data-i18n="aboutApp">关于</h3>
                     <div class="settings-group about-info">
-                        <p data-i18n="aboutText">手机智能记录助手 V1.0</p>
-                        <p data-i18n="aboutDesc">基于 AI 的个人日程管理工具，支持拍照识别、智能问答、数据统计等功能。</p>
+                        <p data-i18n="aboutText">手机智能记录助手 V2.0</p>
+                        <p data-i18n="aboutDesc">基于 AI 的智能记录与日程管理工具，支持 AI 纠错、多轮对话问答、时间线回溯等功能。</p>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <script src="app.js?v=20260812"></script>
+    <!-- ===== 内容对比弹窗 ===== -->
+    <div id="compare-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content compare-modal">
+            <div class="modal-header">
+                <h3 data-i18n="compareTitle">原始内容 vs AI 优化后</h3>
+                <button class="modal-close" onclick="closeCompareModal()">✕</button>
+            </div>
+            <div class="compare-body">
+                <div class="compare-panel">
+                    <div class="compare-panel-title" data-i18n="originalContent">原始内容</div>
+                    <div id="compare-original" class="compare-text"></div>
+                </div>
+                <div class="compare-panel">
+                    <div class="compare-panel-title optimized" data-i18n="optimizedContent">AI 优化后</div>
+                    <div id="compare-optimized" class="compare-text"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="revert-btn" class="secondary-btn" data-i18n="revertOriginal">还原为原始内容</button>
+                <button class="primary-btn" onclick="closeCompareModal()" data-i18n="closeBtn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 编辑弹窗 ===== -->
+    <div id="edit-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content edit-modal">
+            <div class="modal-header">
+                <h3 data-i18n="editRecord">编辑记录</h3>
+                <button class="modal-close" onclick="closeEditModal()"></button>
+            </div>
+            <div class="modal-body">
+                <textarea id="edit-input" rows="6"></textarea>
+                <div class="edit-tags">
+                    <label data-i18n="addTags">添加标签：</label>
+                    <input type="text" id="edit-tags-input" data-i18n-placeholder="tagsPlaceholder" placeholder="用逗号分隔多个标签">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="update-record-btn" class="primary-btn" data-i18n="updateBtn">更新记录</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=20260813"></script>
 </body>
 </html>
