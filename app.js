@@ -25,9 +25,9 @@ let currentFilterTag = 'all';
 let compareRecordId = null;
 let editingRecordId = null;
 
-// 时间线状态
-let timelineView = 'day';
-let timelineDate = new Date();
+// 时间线状态（已移除页面，保留变量以防旧代码引用）
+// let timelineView = 'day';
+// let timelineDate = new Date();
 
 // ===== 多语言配置 =====
 const i18n = {
@@ -332,7 +332,7 @@ function applyLanguage(lang) {
     });
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
     document.getElementById('lang-toggle').textContent = lang === 'zh' ? 'EN' : '中文';
-    renderRecords(); renderSchedules(); renderTimeline(); renderQAHistory();
+    renderRecords(); renderSchedules(); renderQAHistory();
 }
 
 // ===== Tab 切换 =====
@@ -347,8 +347,7 @@ function initTabs() {
                 hasAISynced = true;
                 syncSchedulesFromRecords().then(renderSchedules);
             }
-            if (btn.dataset.tab === 'timeline') renderTimeline();
-            if (btn.dataset.tab === 'stats') renderStats();
+            if (btn.dataset.tab === 'settings') renderStats();
         });
     });
 }
@@ -357,8 +356,6 @@ function initTabs() {
 function initRecordTab() {
     // 保存按钮
     document.getElementById('save-btn').addEventListener('click', saveRecord);
-    // AI 纠错按钮
-    document.getElementById('ai-correct-btn').addEventListener('click', aiCorrectContent);
     // 拍照识别
     document.getElementById('camera-input').addEventListener('change', handleCameraInput);
     // 标签筛选
@@ -378,7 +375,7 @@ async function saveRecord() {
     if (!content) { alert(t('inputRequired')); return; }
 
     const btn = document.getElementById('save-btn');
-    btn.disabled = true; btn.textContent = t('saving');
+    btn.disabled = true; btn.textContent = t('aiCorrecting');
 
     try {
         const style = document.getElementById('polish-style').value;
@@ -395,27 +392,16 @@ async function saveRecord() {
             viewCount: 0
         };
 
-        // AI 纠错整理（如果选择了非原汁原味风格）
-        if (style !== 'original') {
-            try {
-                const corrected = await aiCorrectText(content, style);
-                if (corrected) {
-                    record.correctedContent = corrected.text;
-                    record.content = corrected.text;
-                    record.autoTags = corrected.tags || [];
-                }
-            } catch (e) { console.warn('AI correction failed, using original:', e); }
-        } else {
-            // 即使是原汁原味，也做基础纠错
-            try {
-                const corrected = await aiCorrectText(content, 'original');
-                if (corrected) {
-                    record.correctedContent = corrected.text;
-                    record.content = corrected.text;
-                    record.autoTags = corrected.tags || [];
-                }
-            } catch (e) { console.warn('AI correction failed:', e); }
-        }
+        // ===== 合并 AI 纠错整理流程：先 AI 纠错再保存 =====
+        try {
+            btn.textContent = t('aiCorrecting');
+            const corrected = await aiCorrectText(content, style);
+            if (corrected) {
+                record.correctedContent = corrected.text;
+                record.content = corrected.text;
+                record.autoTags = corrected.tags || [];
+            }
+        } catch (e) { console.warn('AI correction failed, using original:', e); }
 
         records.unshift(record);
         localStorage.setItem('records', JSON.stringify(records));
@@ -424,7 +410,8 @@ async function saveRecord() {
 
         // 自动 AI 解析日程
         try {
-            const scheduleResult = await extractSchedulesFromText(content, record.id);
+            btn.textContent = t('saving');
+            const scheduleResult = await extractSchedulesFromText(record.content, record.id);
             if (scheduleResult && scheduleResult.length > 0) {
                 schedules.push(...scheduleResult);
                 localStorage.setItem('schedules', JSON.stringify(schedules));
@@ -434,7 +421,7 @@ async function saveRecord() {
             }
         } catch { alert(t('saveSuccess')); }
     } finally {
-        btn.disabled = false; btn.textContent = t('saveBtn');
+        btn.disabled = false; btn.textContent = '✨ 保存记录（AI 整理）';
     }
 }
 
@@ -801,112 +788,6 @@ function deleteSchedule(id) {
     schedules = schedules.filter(s => s.id !== id);
     localStorage.setItem('schedules', JSON.stringify(schedules));
     renderSchedules();
-}
-
-// ===== 时间线页面 =====
-function initTimelineTab() {
-    document.querySelectorAll('.timeline-view-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.timeline-view-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            timelineView = btn.dataset.view;
-            renderTimeline();
-        });
-    });
-    document.getElementById('timeline-prev').addEventListener('click', () => {
-        navigateTimeline(-1);
-    });
-    document.getElementById('timeline-next').addEventListener('click', () => {
-        navigateTimeline(1);
-    });
-}
-
-function navigateTimeline(direction) {
-    if (timelineView === 'day') {
-        timelineDate.setDate(timelineDate.getDate() + direction);
-    } else if (timelineView === 'week') {
-        timelineDate.setDate(timelineDate.getDate() + direction * 7);
-    } else {
-        timelineDate.setMonth(timelineDate.getMonth() + direction);
-    }
-    renderTimeline();
-}
-
-function renderTimeline() {
-    const container = document.getElementById('timeline-container');
-    const labelEl = document.getElementById('timeline-label');
-    const now = new Date();
-
-    let startDate, endDate, labelText;
-
-    if (timelineView === 'day') {
-        startDate = new Date(timelineDate.getFullYear(), timelineDate.getMonth(), timelineDate.getDate());
-        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 1);
-        labelText = formatDate(startDate);
-    } else if (timelineView === 'week') {
-        const dayOfWeek = timelineDate.getDay();
-        startDate = new Date(timelineDate);
-        startDate.setDate(startDate.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
-        startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-        endDate = new Date(startDate); endDate.setDate(endDate.getDate() + 7);
-        labelText = `${formatDate(startDate)} - ${formatDate(new Date(endDate.getTime() - 86400000))}`;
-    } else {
-        startDate = new Date(timelineDate.getFullYear(), timelineDate.getMonth(), 1);
-        endDate = new Date(timelineDate.getFullYear(), timelineDate.getMonth() + 1, 1);
-        labelText = `${timelineDate.getFullYear()}年${timelineDate.getMonth() + 1}月`;
-    }
-
-    labelEl.textContent = labelText;
-
-    // 获取该时段的记录和日程
-    const periodRecords = records.filter(r => {
-        const d = new Date(r.createdAt);
-        return d >= startDate && d < endDate;
-    }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    const periodSchedules = schedules.filter(s => {
-        const d = new Date(s.datetime);
-        return d >= startDate && d < endDate;
-    }).sort((a, b) => new Date(a.datetime) - new Date(b.datetime));
-
-    if (periodRecords.length === 0 && periodSchedules.length === 0) {
-        container.innerHTML = `<div class="empty-state"><div class="empty-state-icon"></div><p>${t('noRecordsInPeriod')}</p></div>`;
-        return;
-    }
-
-    let html = '';
-
-    // 日程部分
-    if (periodSchedules.length > 0) {
-        html += `<div class="timeline-section"><h4 class="timeline-section-title">📅 ${t('mySchedules')} (${periodSchedules.length})</h4>`;
-        periodSchedules.forEach(s => {
-            const d = new Date(s.datetime);
-            html += `<div class="timeline-item schedule">
-                <div class="timeline-time">${formatTime(d)}</div>
-                <div class="timeline-content">${escapeHtml(s.title)}</div>
-            </div>`;
-        });
-        html += `</div>`;
-    }
-
-    // 记录部分
-    if (periodRecords.length > 0) {
-        html += `<div class="timeline-section"><h4 class="timeline-section-title">📝 ${t('recentRecords')} (${periodRecords.length})</h4>`;
-        periodRecords.forEach(r => {
-            const d = new Date(r.createdAt);
-            const allTags = [...new Set([...(r.autoTags || []), ...(r.tags || [])])];
-            html += `<div class="timeline-item record">
-                <div class="timeline-time">${formatTime(d)}</div>
-                <div class="timeline-content">
-                    <div class="timeline-text">${escapeHtml(r.content.substring(0, 100))}${r.content.length > 100 ? '...' : ''}</div>
-                    ${allTags.length > 0 ? `<div class="timeline-tags">${allTags.map(tag => `<span class="tag-badge ${tag}">${t('tag' + tag.charAt(0).toUpperCase() + tag.slice(1))}</span>`).join('')}</div>` : ''}
-                </div>
-            </div>`;
-        });
-        html += `</div>`;
-    }
-
-    container.innerHTML = html;
 }
 
 // ===== 问答页面（多轮对话 + 语义匹配）=====
@@ -1316,7 +1197,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initTabs();
     initRecordTab();
     initScheduleTab();
-    initTimelineTab();
     initQATab();
     initStatsTab();
     initSettingsTab();

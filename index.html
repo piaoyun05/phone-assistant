@@ -22,9 +22,7 @@
             <div class="tab-buttons">
                 <button class="tab-btn active" data-tab="record" data-i18n="tabRecord">记录</button>
                 <button class="tab-btn" data-tab="schedule" data-i18n="tabSchedule">日程</button>
-                <button class="tab-btn" data-tab="timeline" data-i18n="tabTimeline">时间线</button>
                 <button class="tab-btn" data-tab="qa" data-i18n="tabQA">问答</button>
-                <button class="tab-btn" data-tab="stats" data-i18n="tabStats">统计</button>
                 <button class="tab-btn" data-tab="settings" data-i18n="tabSettings">设置</button>
             </div>
         </header>
@@ -57,8 +55,7 @@
                     </div>
 
                     <div class="action-buttons">
-                        <button id="save-btn" class="primary-btn" data-i18n="saveBtn">保存记录</button>
-                        <button id="ai-correct-btn" class="secondary-btn" data-i18n="aiCorrectBtn">✨ AI 纠错整理</button>
+                        <button id="save-btn" class="primary-btn full-width">✨ 保存记录（AI 整理）</button>
                     </div>
                 </div>
 
@@ -95,24 +92,6 @@
                 <div id="schedule-container"></div>
             </div>
 
-            <!-- ===== 时间线页面 ===== -->
-            <div id="timeline-tab" class="tab-content">
-                <div class="timeline-header">
-                    <h3 data-i18n="timelineView">时间线视图</h3>
-                    <div class="timeline-controls">
-                        <button class="timeline-view-btn active" data-view="day" data-i18n="viewDay">日</button>
-                        <button class="timeline-view-btn" data-view="week" data-i18n="viewWeek">周</button>
-                        <button class="timeline-view-btn" data-view="month" data-i18n="viewMonth">月</button>
-                    </div>
-                </div>
-                <div class="timeline-nav">
-                    <button id="timeline-prev" class="nav-btn">◀</button>
-                    <span id="timeline-label" class="timeline-label"></span>
-                    <button id="timeline-next" class="nav-btn">▶</button>
-                </div>
-                <div id="timeline-container"></div>
-            </div>
-
             <!-- ===== 问答页面 ===== -->
             <div id="qa-tab" class="tab-content">
                 <div class="qa-section">
@@ -124,10 +103,11 @@
                 </div>
             </div>
 
-            <!-- ===== 统计页面 ===== -->
-            <div id="stats-tab" class="tab-content">
-                <div class="stats-section">
-                    <h3 data-i18n="statsOverview">数据概览</h3>
+            <!-- ===== 设置页面 ===== -->
+            <div id="settings-tab" class="tab-content">
+                <div class="settings-section">
+                    <!-- ===== 数据统计（合并自统计页）===== -->
+                    <h3 data-i18n="statsOverview">📊 数据统计</h3>
                     <div class="stats-cards">
                         <div class="stats-card">
                             <div class="stats-number" id="stat-records">0</div>
@@ -161,12 +141,9 @@
                     <div class="chart-container">
                         <canvas id="monthly-chart" width="400" height="200"></canvas>
                     </div>
-                </div>
-            </div>
 
-            <!-- ===== 设置页面 ===== -->
-            <div id="settings-tab" class="tab-content">
-                <div class="settings-section">
+                    <div class="settings-divider"></div>
+
                     <h3 data-i18n="dataManagement">数据管理</h3>
                     <div class="settings-group">
                         <button id="export-btn" class="settings-btn" data-i18n="exportData">📤 导出数据</button>

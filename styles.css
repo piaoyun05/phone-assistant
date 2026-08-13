@@ -298,6 +298,17 @@ body {
     flex: 1;
 }
 
+.action-buttons .full-width {
+    flex: 1 1 100%;
+}
+
+/* 设置页分隔线 */
+.settings-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 24px 0;
+}
+
 .primary-btn {
     background: var(--bg-gradient);
     color: white;
